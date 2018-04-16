@@ -55,6 +55,8 @@
         renderer.render(scene, camera);
         combiner.update();
         floor.position.y = -combiner.size.y / 2;
+        floor.position.x = combiner.center.x;
+        floor.position.z = combiner.center.z;
         orbiter.update();
     }
 

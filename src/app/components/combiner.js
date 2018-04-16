@@ -50,17 +50,36 @@
                 size = item.size,
                 group = item.group,
                 inner = item.inner;
-            geometry = new THREE.BoxGeometry(381, 95.2, 95.15);
-            // geometry = new THREE.CylinderGeometry(2, 2, 10, 10);
-            var material = new THREE.MeshStandardMaterial({
-                color: new THREE.Color(0.2 * ++I, 0, 0),
-                wireframe: false,
-                transparent: false,
-                opacity: 1,
-            });
-            var model = new THREE.Mesh(geometry, material);
+            // geometry = new THREE.CylinderGeometry(2, 2, 10, 10);            
+            materials[1].color = new THREE.Color(0x000000);
+            var model = new THREE.Mesh(geometry, materials);
+            var material;
+
+            model.geometry.uvsNeedUpdate = true;
+            model.geometry.normalsNeedUpdate = true;
+            model.geometry.verticesNeedUpdate = true;
+
+            // model.geometry.computeMorphNormals();
+            model.geometry.computeFaceNormals();
+            model.geometry.computeVertexNormals();
+            model.geometry.computeBoundingBox();
+
+            // console.log(model);
             box.setFromObject(model);
             box.getSize(size);
+
+            if (true) {
+                console.log(size);
+                geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
+                material = new THREE.MeshStandardMaterial({
+                    color: new THREE.Color(0.2 * ++I, 0, 0),
+                    wireframe: false,
+                    transparent: false,
+                    opacity: 1,
+                });
+                model = new THREE.Mesh(geometry, material);
+            }
+
             model.position.set(size.x / 2, 0, 0);
             var left = item.joint(
                 new THREE.Vector3(-size.x / 2, 0, 0),
@@ -70,7 +89,7 @@
             var right = item.joint(
                 new THREE.Vector3(size.x / 2, 0, 0),
                 // new THREE.Vector3(0, 0, -rad(10) + rad(20) * Math.random()),
-                new THREE.Vector3(0, 0, rad(10)),
+                new THREE.Vector3(0, 0, rad(0)),
                 0xff0000
             );
             inner.scale.set(SCALE, SCALE, SCALE);
@@ -89,7 +108,6 @@
         function joint(origin, rotation, color) {
             var item = this,
                 size = item.size;
-            var s = size.x / 10;
             // rotation.normalize();
             var helper = new THREE.Group();
             helper.position.copy(origin);
@@ -100,6 +118,7 @@
             oppositeQuaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), rad(180));
             helper.oppositeQuaternion = new THREE.Quaternion().multiplyQuaternions(oppositeQuaternion, helper.quaternion);
             if (DEBUG) {
+                var s = size.x / 10;
                 var arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), s, color, s / 2, s / 2);
                 helper.arrow = arrow;
                 helper.add(arrow);

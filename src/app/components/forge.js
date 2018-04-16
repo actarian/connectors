@@ -14,16 +14,19 @@
             load: load,
         };
 
+        var i = 0;
+
         function load(callback) {
             var service = this;
             http({
-                url: 'img/Body 1.js',
+                url: i % 2 === 0 ? 'img/Body 1.js' : 'img/Angled Emitter 1.js',
                 onload: function (data) {
                     data = data.replace(new RegExp('transparency', 'g'), 'opacity');
                     var model = service.loader.parse(JSON.parse(data));
                     callback(model.geometry, model.materials);
                 }
             });
+            i++;
         }
 
         function http(options) {
