@@ -6,6 +6,7 @@
     var DEBUG = false;
     var RAD = Math.PI / 180;
     var I = 0;
+    var MIN = 11;
 
     function rad(degree) {
         return degree * RAD;
@@ -28,7 +29,7 @@
             orbiter.rotate = true;
 
             orbiter.target = new THREE.Vector3(0, 0, 0);
-            orbiter.distance = 22;
+            orbiter.distance = MIN * 2;
             orbiter.rotationAngle = 1;
             orbiter.dragAngle = 0;
             orbiter.zoom = 1; // eliminabili ??
@@ -36,15 +37,15 @@
 
             orbiter.values = {
                 target: new THREE.Vector3(0, 0, 0),
-                distance: 22,
+                distance: MIN * 2,
                 rotationAngle: 0,
                 dragAngle: 0,
                 zoom: 0,
                 pow: 0,
             };
 
-            orbiter.distanceMin = 10;
-            orbiter.distanceMax = 34;
+            orbiter.distanceMin = MIN;
+            orbiter.distanceMax = MIN * 3;
             /*
             if (combiner.selected.item.type === APP.Parts.typeEnum.BladePlug) {
                 orbiter.pow = 1;
@@ -98,28 +99,39 @@
             var object = combiner.selection ? combiner.selection.item.group : combiner.group;
             box.setFromObject(object);
             box.getCenter(center);
-            orbiter.set(dummy, center);
-            /*
-            dummy.position.copy(camera.position);
-            dummy.quaternion.copy(camera.quaternion);
-            dummy.up = up;
-            dummy.lookAt(center);
-            */
-            dummy.updateProjectionMatrix();
-            var min = orbiter.toScreen(box.min);
-            var max = orbiter.toScreen(box.max);
-            var sc = orbiter.toScreen(center);
-            box.applyMatrix4(dummy.matrixWorldInverse);
             box.getSize(size);
-            var aspect = size.x / size.y;
-            var dim = (camera.aspect > aspect) ? size.y : size.x;
-            if (camera.aspect < aspect) {
-                dim /= camera.aspect;
+            if (combiner.items.length > 0) {
+                orbiter.set(dummy, center);
+                /*
+                dummy.position.copy(camera.position);
+                dummy.quaternion.copy(camera.quaternion);
+                dummy.up = up;
+                dummy.lookAt(center);
+                */
+                dummy.fov = camera.fov;
+                dummy.aspect = camera.aspect;
+                /*
+                dummy.updateProjectionMatrix();
+                var min = orbiter.toScreen(box.min);
+                var max = orbiter.toScreen(box.max);
+                var sc = orbiter.toScreen(center);
+                */
+                // dummy.matrixWorldNeedsUpdate = true;
+                // dummy.matrixWorldInverse.getInverse(dummy.matrixWorld);
+                size.applyMatrix4(dummy.matrixWorldInverse);
+                var aspect = size.x / size.y;
+                var dim = (camera.aspect > aspect) ? size.y : size.x;
+                if (camera.aspect < aspect) {
+                    dim /= camera.aspect;
+                }
+                dim *= offset;
+                var z = dim / 2 / Math.sin(camera.fov / 2 * RAD);
+                orbiter.distance = z;
+            } else {
+                orbiter.distance = MIN;
             }
-            dim *= offset;
-            var z = dim / 2 / Math.sin(camera.fov / 2 * RAD);
-            dummy.position.normalize().multiplyScalar(z);
-            orbiter.distance = dummy.position.distanceTo(center);
+            orbiter.distanceMin = orbiter.distance * 0.5;
+            orbiter.distanceMax = orbiter.distance * 1.5;
             //
             orbiter.target.copy(center);
         }

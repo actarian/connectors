@@ -55,13 +55,12 @@
             var material = new THREE.MeshStandardMaterial({
                 color: new THREE.Color(0.2 * ++I, 0, 0),
                 wireframe: false,
-                transparent: true,
-                opacity: 0.8,
+                transparent: false,
+                opacity: 1,
             });
             var model = new THREE.Mesh(geometry, material);
             box.setFromObject(model);
             box.getSize(size);
-            console.log(size);
             model.position.set(size.x / 2, 0, 0);
             var left = item.joint(
                 new THREE.Vector3(-size.x / 2, 0, 0),
@@ -169,6 +168,7 @@
             pop: pop,
             remove: remove,
             select: select,
+            unselect: unselect,
             update: update,
         };
 
@@ -184,7 +184,6 @@
         function adjust() {
             var combiner = this,
                 group = combiner.group;
-            combiner.selection = null;
             combiner.combine();
             combiner.fit(group);
             // combiner.fitCamera();
@@ -197,6 +196,8 @@
                 items = combiner.items,
                 hittables = combiner.hittables,
                 group = combiner.group;
+
+            combiner.unselect();
             var item = new CombinerItem(geometry, materials);
             items.push(item);
             combiner.hittables = items.map(function (item) {
@@ -222,7 +223,7 @@
                 combiner.hittables = items.map(function (item) {
                     return item.model;
                 });
-                combiner.selection = null;
+                combiner.unselect();
                 combiner.adjust();
                 if (items.length > selection.index) {
                     items[selection.index].enter();
@@ -300,10 +301,12 @@
             box.getCenter(center);
             box.getSize(size);
             centerhelper.position.copy(center);
+            /*
             group.worldToLocal(center);
             group.position.x = -center.x;
             group.position.y = -center.y;
             group.position.z = -center.z;
+            */
             return size;
         }
 
@@ -311,20 +314,33 @@
             var combiner = this,
                 items = combiner.items,
                 hittables = combiner.hittables;
+
+            combiner.unselect();
             var hitted = raycaster.intersectObjects(hittables);
             var selection = null;
             if (hitted.length) {
                 var index = hittables.indexOf(hitted[0].object);
                 var item = items[index];
                 var rotation = item.inner.rotation.clone();
+                item.model.material.emissive = new THREE.Color(0x888888);
+                // item.model.material.needsUpdate = true;
                 selection = {
                     index: index,
                     item: item,
                     rotation: rotation,
                 };
+                combiner.selection = selection;
             }
-            combiner.selection = selection;
             return selection;
+        }
+
+        function unselect() {
+            var combiner = this;
+            if (combiner.selection) {
+                combiner.selection.item.model.material.emissive = new THREE.Color(0x000000);
+                // combiner.selection.item.model.material.needsUpdate = true;
+                combiner.selection = null;
+            }
         }
 
         function flipItem(item, callback) {
@@ -333,9 +349,11 @@
             item.flip(function () {
                 combiner.flipping--;
                 combiner.adjust();
-                combiner.selection = null;
+                // combiner.unselect(); ???
                 if (typeof (callback) === 'function') {
-                    callback();
+                    setTimeout(function () {
+                        callback();
+                    }, 100);
                 }
             });
         }

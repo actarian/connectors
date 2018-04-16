@@ -225,13 +225,12 @@
             var material = new THREE.MeshStandardMaterial({
                 color: new THREE.Color(0.2 * ++I, 0, 0),
                 wireframe: false,
-                transparent: true,
-                opacity: 0.8,
+                transparent: false,
+                opacity: 1,
             });
             var model = new THREE.Mesh(geometry, material);
             box.setFromObject(model);
             box.getSize(size);
-            console.log(size);
             model.position.set(size.x / 2, 0, 0);
             var left = item.joint(
                 new THREE.Vector3(-size.x / 2, 0, 0),
@@ -339,6 +338,7 @@
             pop: pop,
             remove: remove,
             select: select,
+            unselect: unselect,
             update: update,
         };
 
@@ -354,7 +354,6 @@
         function adjust() {
             var combiner = this,
                 group = combiner.group;
-            combiner.selection = null;
             combiner.combine();
             combiner.fit(group);
             // combiner.fitCamera();
@@ -367,6 +366,8 @@
                 items = combiner.items,
                 hittables = combiner.hittables,
                 group = combiner.group;
+
+            combiner.unselect();
             var item = new CombinerItem(geometry, materials);
             items.push(item);
             combiner.hittables = items.map(function (item) {
@@ -392,7 +393,7 @@
                 combiner.hittables = items.map(function (item) {
                     return item.model;
                 });
-                combiner.selection = null;
+                combiner.unselect();
                 combiner.adjust();
                 if (items.length > selection.index) {
                     items[selection.index].enter();
@@ -470,10 +471,12 @@
             box.getCenter(center);
             box.getSize(size);
             centerhelper.position.copy(center);
+            /*
             group.worldToLocal(center);
             group.position.x = -center.x;
             group.position.y = -center.y;
             group.position.z = -center.z;
+            */
             return size;
         }
 
@@ -481,20 +484,33 @@
             var combiner = this,
                 items = combiner.items,
                 hittables = combiner.hittables;
+
+            combiner.unselect();
             var hitted = raycaster.intersectObjects(hittables);
             var selection = null;
             if (hitted.length) {
                 var index = hittables.indexOf(hitted[0].object);
                 var item = items[index];
                 var rotation = item.inner.rotation.clone();
+                item.model.material.emissive = new THREE.Color(0x888888);
+                // item.model.material.needsUpdate = true;
                 selection = {
                     index: index,
                     item: item,
                     rotation: rotation,
                 };
+                combiner.selection = selection;
             }
-            combiner.selection = selection;
             return selection;
+        }
+
+        function unselect() {
+            var combiner = this;
+            if (combiner.selection) {
+                combiner.selection.item.model.material.emissive = new THREE.Color(0x000000);
+                // combiner.selection.item.model.material.needsUpdate = true;
+                combiner.selection = null;
+            }
         }
 
         function flipItem(item, callback) {
@@ -503,9 +519,11 @@
             item.flip(function () {
                 combiner.flipping--;
                 combiner.adjust();
-                combiner.selection = null;
+                // combiner.unselect(); ???
                 if (typeof (callback) === 'function') {
-                    callback();
+                    setTimeout(function () {
+                        callback();
+                    }, 100);
                 }
             });
         }
@@ -738,6 +756,7 @@
     var DEBUG = false;
     var RAD = Math.PI / 180;
     var I = 0;
+    var MIN = 11;
 
     function rad(degree) {
         return degree * RAD;
@@ -760,7 +779,7 @@
             orbiter.rotate = true;
 
             orbiter.target = new THREE.Vector3(0, 0, 0);
-            orbiter.distance = 22;
+            orbiter.distance = MIN * 2;
             orbiter.rotationAngle = 1;
             orbiter.dragAngle = 0;
             orbiter.zoom = 1; // eliminabili ??
@@ -768,15 +787,15 @@
 
             orbiter.values = {
                 target: new THREE.Vector3(0, 0, 0),
-                distance: 22,
+                distance: MIN * 2,
                 rotationAngle: 0,
                 dragAngle: 0,
                 zoom: 0,
                 pow: 0,
             };
 
-            orbiter.distanceMin = 10;
-            orbiter.distanceMax = 34;
+            orbiter.distanceMin = MIN;
+            orbiter.distanceMax = MIN * 3;
             /*
             if (combiner.selected.item.type === APP.Parts.typeEnum.BladePlug) {
                 orbiter.pow = 1;
@@ -830,28 +849,39 @@
             var object = combiner.selection ? combiner.selection.item.group : combiner.group;
             box.setFromObject(object);
             box.getCenter(center);
-            orbiter.set(dummy, center);
-            /*
-            dummy.position.copy(camera.position);
-            dummy.quaternion.copy(camera.quaternion);
-            dummy.up = up;
-            dummy.lookAt(center);
-            */
-            dummy.updateProjectionMatrix();
-            var min = orbiter.toScreen(box.min);
-            var max = orbiter.toScreen(box.max);
-            var sc = orbiter.toScreen(center);
-            box.applyMatrix4(dummy.matrixWorldInverse);
             box.getSize(size);
-            var aspect = size.x / size.y;
-            var dim = (camera.aspect > aspect) ? size.y : size.x;
-            if (camera.aspect < aspect) {
-                dim /= camera.aspect;
+            if (combiner.items.length > 0) {
+                orbiter.set(dummy, center);
+                /*
+                dummy.position.copy(camera.position);
+                dummy.quaternion.copy(camera.quaternion);
+                dummy.up = up;
+                dummy.lookAt(center);
+                */
+                dummy.fov = camera.fov;
+                dummy.aspect = camera.aspect;
+                /*
+                dummy.updateProjectionMatrix();
+                var min = orbiter.toScreen(box.min);
+                var max = orbiter.toScreen(box.max);
+                var sc = orbiter.toScreen(center);
+                */
+                // dummy.matrixWorldNeedsUpdate = true;
+                // dummy.matrixWorldInverse.getInverse(dummy.matrixWorld);
+                size.applyMatrix4(dummy.matrixWorldInverse);
+                var aspect = size.x / size.y;
+                var dim = (camera.aspect > aspect) ? size.y : size.x;
+                if (camera.aspect < aspect) {
+                    dim /= camera.aspect;
+                }
+                dim *= offset;
+                var z = dim / 2 / Math.sin(camera.fov / 2 * RAD);
+                orbiter.distance = z;
+            } else {
+                orbiter.distance = MIN;
             }
-            dim *= offset;
-            var z = dim / 2 / Math.sin(camera.fov / 2 * RAD);
-            dummy.position.normalize().multiplyScalar(z);
-            orbiter.distance = dummy.position.distanceTo(center);
+            orbiter.distanceMin = orbiter.distance * 0.5;
+            orbiter.distanceMax = orbiter.distance * 1.5;
             //
             orbiter.target.copy(center);
         }
@@ -1053,7 +1083,7 @@
                 // PINCH                   
                 orbiter.distance = down.startDistance + (down.pinchSize() - move.pinchSize()) * pow * 10;
             } else {
-                if (down.item && combiner.selectedItem === down.item) {
+                if (combiner.selection && combiner.selection.item === down.item) {
                     // ROTATE ITEM
                     // down.item.rotation = down.rotation + (move.y - down.y) * pow * 10;
                     var index = down.index;
@@ -1076,7 +1106,7 @@
                 }
             }
             // orbiter.update();
-            // orbiter.distance = Math.min(orbiter.distanceMax, Math.max(orbiter.distanceMin, orbiter.distance));
+            orbiter.distance = Math.min(orbiter.distanceMax, Math.max(orbiter.distanceMin, orbiter.distance));
             // scope.$root.$broadcast('onControls');
         }
     }

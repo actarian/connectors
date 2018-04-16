@@ -138,7 +138,7 @@
                 // PINCH                   
                 orbiter.distance = down.startDistance + (down.pinchSize() - move.pinchSize()) * pow * 10;
             } else {
-                if (down.item && combiner.selectedItem === down.item) {
+                if (combiner.selection && combiner.selection.item === down.item) {
                     // ROTATE ITEM
                     // down.item.rotation = down.rotation + (move.y - down.y) * pow * 10;
                     var index = down.index;
@@ -161,7 +161,7 @@
                 }
             }
             // orbiter.update();
-            // orbiter.distance = Math.min(orbiter.distanceMax, Math.max(orbiter.distanceMin, orbiter.distance));
+            orbiter.distance = Math.min(orbiter.distanceMax, Math.max(orbiter.distanceMin, orbiter.distance));
             // scope.$root.$broadcast('onControls');
         }
     }
