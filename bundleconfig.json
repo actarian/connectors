@@ -22,8 +22,11 @@
     }
 }, {
     "inputFiles": [
+        "src/app/components/prototype.js",
         "src/app/components/forge.js",
         "src/app/components/combiner.js",
+        "src/app/components/fitter.js",
+        "src/app/components/orbiter.js",
         "src/app/app.js"
     ],
     "outputFileName": "docs/js/app.js",
