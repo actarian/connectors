@@ -65,7 +65,7 @@
             model.position.set(size.x / 2, 0, 0);
             var left = item.joint(
                 new THREE.Vector3(-size.x / 2, 0, 0),
-                new THREE.Vector3(0, 0, -rad(180) + rad(10)),
+                new THREE.Vector3(0, 0, -rad(180)), // + rad(10)
                 0x00ff00
             );
             var right = item.joint(
@@ -84,7 +84,7 @@
             item.left = left;
             item.lquaternion = new THREE.Quaternion().multiplyQuaternions(left.quaternion, flipQuaternion);
             item.right = right;
-            item.rquaternion = right.quaternion;
+            item.rquaternion = right.quaternion; // not flipped cause already in opposite direction
         }
 
         function joint(origin, rotation, color) {
@@ -121,8 +121,7 @@
                 // onUpdate: function() { },
                 onComplete: function () {
                     // console.log('flipped');
-                    // item.left = item.flipped ? item.bb : item.aa;
-                    // item.right = item.flipped ? item.aa : item.bb;
+                    // item.group.updateMatrixWorld();
                     if (typeof callback === 'function') {
                         callback();
                     }
