@@ -31,7 +31,7 @@
             init: init,
             flip: flip,
             getJoints: getJoints,
-            joint: joint,
+            getJoint: getJoint,
         };
 
         function enter() {
@@ -45,38 +45,64 @@
             });
         }
 
-        function getCentroid(faces) {
-            var scores = [1, 4, 6, 8];
-            var result = scores.reduce(function (total, current, index, array) {
-                return (total + current) / array.length;
+        function getCentroid(vertices) {
+            var center = vertices.reduce(function (a, b) {
+                return {
+                    x: a.x + b.x,
+                    y: a.y + b.y,
+                    z: a.z + b.z
+                };
             });
-            console.log('getCentroid', result); // 4.75            
+            return new THREE.Vector3().add(center).divideScalar(vertices.length);
         }
 
-        function getJoints(geometry, materials) {
+        function getJoints(geometry, materials, size) {
             var joints = {},
-                keys = {
-                    0: 'left',
-                    1: 'right',
-                    2: 'top',
-                    3: 'bottom',
-                },
-                ids = Object.keys(keys),
-                index;
-            console.log('ids', ids);
-            geometry.faces.filter(function (face) {
-                index = face.materialIndex;
-                if (ids.indexOf(String(index)) !== -1) {
-                    var key = keys[index];
-                    var joint = joints[key] || (joints[key] = {
-                        faces: []
-                    });
-                    joint.normal = joint.normal || face.normal; // assume all faces point toward direction;
-                    joint.faces.push(face);
+                ids = {},
+                names = ['left', 'right', 'top', 'bottom'],
+                colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00],
+                index, joint, face;
+            materials.map(function (material, index) {
+                // console.log(material);
+                var i = names.indexOf(material.name);
+                if (i !== -1) {
+                    var joint = new THREE.Group();
+                    joint.name = names[i];
+                    joint.vertices = [];
+                    joint.c = colors[i];
+                    joints[material.name] = joint;
+                    ids[index] = joint;
                 }
             });
-            getCentroid(null);
-            console.log('item.getJoints', joints);
+            for (var i = 0; i < geometry.faces.length; i++) {
+                face = geometry.faces[i];
+                joint = ids[String(face.materialIndex)];
+                if (joint) {
+                    joint.normal = joint.normal || face.normal; // assume all faces point toward direction;
+                    joint.vertices.push(geometry.vertices[face.a]);
+                    joint.vertices.push(geometry.vertices[face.b]);
+                    joint.vertices.push(geometry.vertices[face.c]);
+                    // console.log(joint.name, joint.normal);
+                }
+            }
+            for (var key in joints) {
+                joint = joints[key];
+                joint.position.copy(getCentroid(joint.vertices));
+                joint.vertices = null;
+            }
+            if (!joints.left) {
+                joints.left = new THREE.Group();
+                joints.left.position.set(-size.x / 2, 0, 0);
+                joints.left.normal = new THREE.Vector3(-1, 0, 0);
+                joints.left.c = colors[0];
+            }
+            if (!joints.right) {
+                joints.right = new THREE.Group();
+                joints.right.position.set(size.x / 2, 0, 0);
+                joints.right.normal = new THREE.Vector3(1, 0, 0);
+                joints.right.c = colors[1];
+            }
+            // console.log('item.getJoints', joints, size);
             return joints;
         }
 
@@ -87,11 +113,14 @@
                 group = item.group,
                 inner = item.inner;
 
-            var joints = item.getJoints(geometry, materials);
+            var model = new THREE.Mesh(geometry, materials);
+            box.setFromObject(model);
+            box.getSize(size);
+
+            var joints = item.getJoints(geometry, materials, size);
 
             // geometry = new THREE.CylinderGeometry(2, 2, 10, 10);            
             materials[1].color = new THREE.Color(0x000000);
-            var model = new THREE.Mesh(geometry, materials);
             var material;
 
             model.geometry.uvsNeedUpdate = true;
@@ -104,27 +133,55 @@
             model.geometry.computeBoundingBox();
 
             // console.log(model);
-            box.setFromObject(model);
-            box.getSize(size);
 
             if (true) {
                 geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
                 material = new THREE.MeshStandardMaterial({
                     color: new THREE.Color(0.2 * ++I, 0, 0),
                     wireframe: false,
-                    transparent: false,
-                    opacity: 1,
+                    transparent: true,
+                    opacity: 0.1,
                 });
                 model = new THREE.Mesh(geometry, material);
             }
 
             model.position.set(size.x / 2, 0, 0);
-            var left = item.joint(
+            for (var key in joints) {
+                var joint = joints[key];
+                // joint.quaternion.setFromAxisAngle(joint.normal, rad(90));
+                var x = joint.normal.x,
+                    y = joint.normal.y,
+                    z = -joint.normal.z;
+                /*
+                var rx = Math.atan2(y, z),
+                    ry = z >= 0 ? -Math.atan2(x * Math.cos(rx), z) : Math.atan2(x * Math.cos(rx), -z),
+                    rz = 0;
+                var rotation = new THREE.Euler(rx, ry, rz);
+                 */
+                var rotation = new THREE.Euler(
+                    0,
+                    Math.atan2(z, x),
+                    Math.atan2(y, Math.sqrt(x * x + z * z))
+                );
+                joint.rotation.copy(rotation);
+                // joint.lookAt(joint.normal);
+                // joint.rotateY(joint.normal.x * rad(90));
+                model.add(joint);
+                joint.oquaternion = new THREE.Quaternion().multiplyQuaternions(joint.quaternion, flipQuaternion);
+                if (true) {
+                    var s = size.x / 10;
+                    var arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), s, joint.c, s / 2, s / 2);
+                    joint.arrow = arrow;
+                    joint.add(arrow);
+                }
+            }
+            /*
+            var left = item.getJoint(
                 new THREE.Vector3(-size.x / 2, 0, 0),
                 new THREE.Vector3(0, 0, -rad(180)), // + rad(10)
                 0x00ff00
             );
-            var right = item.joint(
+            var right = item.getJoint(
                 new THREE.Vector3(size.x / 2, 0, 0),
                 // new THREE.Vector3(0, 0, -rad(10) + rad(20) * Math.random()),
                 new THREE.Vector3(0, 0, rad(0)),
@@ -141,9 +198,15 @@
             item.lquaternion = new THREE.Quaternion().multiplyQuaternions(left.quaternion, flipQuaternion);
             item.right = right;
             item.rquaternion = right.quaternion; // not flipped cause already in opposite direction
+            */
+            inner.scale.set(SCALE, SCALE, SCALE);
+            inner.add(model);
+            group.add(inner);
+            item.model = model;
+            item.joints = joints;
         }
 
-        function joint(origin, rotation, color) {
+        function getJoint(origin, rotation, color) {
             var item = this,
                 size = item.size;
             // rotation.normalize();
@@ -309,7 +372,7 @@
             }
         }
 
-        function combine() {
+        function __combine() {
             var combiner = this,
                 items = combiner.items,
                 group = combiner.group;
@@ -327,6 +390,44 @@
                 } else {
                     lquaternion = item.lquaternion;
                     right = item.right;
+                }
+                if (i > 0) {
+                    item.group.position.copy(previousPosition.sub(groupPosition));
+                    item.group.setRotationFromQuaternion(previousQuaternion.multiply(lquaternion));
+                    item.group.updateMatrixWorld();
+                }
+                /*
+                if (i === 1) {
+                    item.model.rotation.x += 0.01;
+                }
+                */
+                right.getWorldQuaternion(previousQuaternion);
+                right.getWorldPosition(previousPosition);
+            }
+            if (items.length) {
+                group.getWorldPosition(groupPosition);
+                items.filter(combineItem);
+            }
+        }
+
+        function combine() {
+            var combiner = this,
+                items = combiner.items,
+                group = combiner.group;
+            var previousQuaternion = new THREE.Quaternion();
+            var nextQuaternion = new THREE.Quaternion();
+            var previousPosition = new THREE.Vector3();
+            var groupPosition = new THREE.Vector3();
+            var lquaternion, right;
+
+            function combineItem(item, i) {
+                // item.inner.position.x += (0 - item.inner.position.x) / 5;
+                if (item.flipped) {
+                    lquaternion = item.joints.right.quaternion;
+                    right = item.joints.left;
+                } else {
+                    lquaternion = item.joints.left.oquaternion;
+                    right = item.joints.right;
                 }
                 if (i > 0) {
                     item.group.position.copy(previousPosition.sub(groupPosition));
