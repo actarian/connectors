@@ -30,6 +30,7 @@
             enter: enter,
             init: init,
             flip: flip,
+            getJoints: getJoints,
             joint: joint,
         };
 
@@ -44,12 +45,50 @@
             });
         }
 
+        function getCentroid(faces) {
+            var scores = [1, 4, 6, 8];
+            var result = scores.reduce(function (total, current, index, array) {
+                return (total + current) / array.length;
+            });
+            console.log('getCentroid', result); // 4.75            
+        }
+
+        function getJoints(geometry, materials) {
+            var joints = {},
+                keys = {
+                    0: 'left',
+                    1: 'right',
+                    2: 'top',
+                    3: 'bottom',
+                },
+                ids = Object.keys(keys),
+                index;
+            console.log('ids', ids);
+            geometry.faces.filter(function (face) {
+                index = face.materialIndex;
+                if (ids.indexOf(String(index)) !== -1) {
+                    var key = keys[index];
+                    var joint = joints[key] || (joints[key] = {
+                        faces: []
+                    });
+                    joint.normal = joint.normal || face.normal; // assume all faces point toward direction;
+                    joint.faces.push(face);
+                }
+            });
+            getCentroid(null);
+            console.log('item.getJoints', joints);
+            return joints;
+        }
+
         function init(geometry, materials) {
             var item = this,
                 box = item.box,
                 size = item.size,
                 group = item.group,
                 inner = item.inner;
+
+            var joints = item.getJoints(geometry, materials);
+
             // geometry = new THREE.CylinderGeometry(2, 2, 10, 10);            
             materials[1].color = new THREE.Color(0x000000);
             var model = new THREE.Mesh(geometry, materials);
@@ -69,7 +108,6 @@
             box.getSize(size);
 
             if (true) {
-                console.log(size);
                 geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
                 material = new THREE.MeshStandardMaterial({
                     color: new THREE.Color(0.2 * ++I, 0, 0),
