@@ -18,7 +18,7 @@
     var renderer = new THREE.WebGLRenderer({
         alpha: true,
     });
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(container.offsetWidth, container.offsetHeight);
     container.appendChild(renderer.domElement);
 
     var camera = new THREE.PerspectiveCamera(45, container.offsetWidth / container.offsetHeight, 1, 50000);
@@ -144,8 +144,8 @@
                     // ROTATE ITEM
                     // down.item.rotation = down.rotation + (move.y - down.y) * pow * 10;
                     var index = down.index;
-                    // down.item.inner.rotation.x = down.rotation.x + diff.y * Math.PI;
-                    down.item.inner.rotation.x = down.rotation.x + diff.y * pow * 10;
+                    // down.item.outer.rotation.x = down.rotation.x + diff.y * Math.PI;
+                    down.item.outer.rotation.x = down.rotation.x + diff.y * pow * 10;
                     combiner.adjust();
                 } else {
                     // DRAG CAMERA

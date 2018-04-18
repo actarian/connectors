@@ -4,6 +4,10 @@
     'use strict';
 
     var DEBUG = false;
+    var DEBUG_HELPER = false;
+    var DEBUG_ANGLE = false;
+    var DEBUG_ARROW = true;
+    var DEBUG_MODELS = true;
     var RAD = Math.PI / 180;
     var SCALE = 0.025;
     var I = 0;
@@ -22,6 +26,7 @@
             item.size = new THREE.Vector3();
             item.box = new THREE.Box3();
             item.group = new THREE.Group();
+            item.outer = new THREE.Group();
             item.inner = new THREE.Group();
             item.init(geometry, materials);
         }
@@ -31,13 +36,13 @@
             init: init,
             flip: flip,
             getJoints: getJoints,
-            getJoint: getJoint,
+            setFlip: setFlip,
         };
 
         function enter() {
             var item = this;
-            item.inner.position.x = item.size.x * SCALE;
-            TweenLite.to(item.inner.position, 0.6, {
+            item.outer.position.x = item.size.x;
+            TweenLite.to(item.outer.position, 0.6, {
                 x: 0,
                 ease: Power2.easeOut,
                 overwrite: 'all',
@@ -59,6 +64,14 @@
         function getJoints(geometry, materials, size) {
             var joints = {},
                 ids = {},
+                /*
+                diffs = [
+                    new THREE.Vector3(-size.x / 2, 0, 0), // left
+                    new THREE.Vector3(size.x / 2, 0, 0), // right
+                    new THREE.Vector3(0, -size.y / 2, 0), // top
+                    new THREE.Vector3(0, size.y / 2, 0), // bottom
+                ],
+                */
                 names = ['left', 'right', 'top', 'bottom'],
                 colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00],
                 index, joint, face;
@@ -67,9 +80,10 @@
                 var i = names.indexOf(material.name);
                 if (i !== -1) {
                     var joint = new THREE.Group();
+                    // joint.diff = diffs[i];
                     joint.name = names[i];
-                    joint.vertices = [];
                     joint.c = colors[i];
+                    joint.vertices = [];
                     joints[material.name] = joint;
                     ids[index] = joint;
                 }
@@ -88,6 +102,7 @@
             for (var key in joints) {
                 joint = joints[key];
                 joint.position.copy(getCentroid(joint.vertices));
+                // joint.diff.sub(joint.position);
                 joint.vertices = null;
             }
             if (!joints.left) {
@@ -102,6 +117,9 @@
                 joints.right.normal = new THREE.Vector3(1, 0, 0);
                 joints.right.c = colors[1];
             }
+            if (DEBUG_ANGLE) {
+                joints.right.normal.y += 0.2;
+            }
             // console.log('item.getJoints', joints, size);
             return joints;
         }
@@ -111,7 +129,14 @@
                 box = item.box,
                 size = item.size,
                 group = item.group,
+                outer = item.outer,
                 inner = item.inner;
+
+            for (var v = 0; v < geometry.vertices.length; v++) {
+                geometry.vertices[v].x *= SCALE;
+                geometry.vertices[v].y *= SCALE;
+                geometry.vertices[v].z *= SCALE;
+            }
 
             var model = new THREE.Mesh(geometry, materials);
             box.setFromObject(model);
@@ -119,8 +144,6 @@
 
             var joints = item.getJoints(geometry, materials, size);
 
-            // geometry = new THREE.CylinderGeometry(2, 2, 10, 10);            
-            materials[1].color = new THREE.Color(0x000000);
             var material;
 
             model.geometry.uvsNeedUpdate = true;
@@ -134,105 +157,72 @@
 
             // console.log(model);
 
-            if (true) {
+            if (DEBUG_MODELS) {
+                // geometry = new THREE.CylinderGeometry(2, 2, 10, 10);            
+                materials[1].color = new THREE.Color(0x000000);
                 geometry = new THREE.BoxGeometry(size.x, size.y, size.z);
                 material = new THREE.MeshStandardMaterial({
                     color: new THREE.Color(0.2 * ++I, 0, 0),
                     wireframe: false,
-                    transparent: true,
-                    opacity: 0.1,
+                    transparent: false,
+                    opacity: 1.0,
                 });
                 model = new THREE.Mesh(geometry, material);
             }
 
-            model.position.set(size.x / 2, 0, 0);
             for (var key in joints) {
                 var joint = joints[key];
-                // joint.quaternion.setFromAxisAngle(joint.normal, rad(90));
                 var x = joint.normal.x,
                     y = joint.normal.y,
                     z = -joint.normal.z;
-                /*
-                var rx = Math.atan2(y, z),
-                    ry = z >= 0 ? -Math.atan2(x * Math.cos(rx), z) : Math.atan2(x * Math.cos(rx), -z),
-                    rz = 0;
-                var rotation = new THREE.Euler(rx, ry, rz);
-                 */
                 var rotation = new THREE.Euler(
                     0,
                     Math.atan2(z, x),
                     Math.atan2(y, Math.sqrt(x * x + z * z))
                 );
                 joint.rotation.copy(rotation);
-                // joint.lookAt(joint.normal);
-                // joint.rotateY(joint.normal.x * rad(90));
                 model.add(joint);
                 joint.oquaternion = new THREE.Quaternion().multiplyQuaternions(joint.quaternion, flipQuaternion);
-                if (true) {
+                if (DEBUG_ARROW) {
                     var s = size.x / 10;
                     var arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), s, joint.c, s / 2, s / 2);
                     joint.arrow = arrow;
                     joint.add(arrow);
                 }
             }
-            /*
-            var left = item.getJoint(
-                new THREE.Vector3(-size.x / 2, 0, 0),
-                new THREE.Vector3(0, 0, -rad(180)), // + rad(10)
-                0x00ff00
-            );
-            var right = item.getJoint(
-                new THREE.Vector3(size.x / 2, 0, 0),
-                // new THREE.Vector3(0, 0, -rad(10) + rad(20) * Math.random()),
-                new THREE.Vector3(0, 0, rad(0)),
-                0xff0000
-            );
-            inner.scale.set(SCALE, SCALE, SCALE);
-            model.add(left);
-            model.add(right);
+            inner.position.set(size.x / 2, 0, 0);
             inner.add(model);
-            group.add(inner);
-            // new items
-            item.model = model;
-            item.left = left;
-            item.lquaternion = new THREE.Quaternion().multiplyQuaternions(left.quaternion, flipQuaternion);
-            item.right = right;
-            item.rquaternion = right.quaternion; // not flipped cause already in opposite direction
-            */
-            inner.scale.set(SCALE, SCALE, SCALE);
-            inner.add(model);
-            group.add(inner);
-            item.model = model;
+            outer.add(inner);
+            group.add(outer);
             item.joints = joints;
+            item.model = model;
         }
 
-        function getJoint(origin, rotation, color) {
+        function setFlip() {
             var item = this,
-                size = item.size;
-            // rotation.normalize();
-            var helper = new THREE.Group();
-            helper.position.copy(origin);
-            helper.rotation.x = rotation.x;
-            helper.rotation.y = rotation.y;
-            helper.rotation.z = rotation.z;
-            var oppositeQuaternion = new THREE.Quaternion();
-            oppositeQuaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), rad(180));
-            helper.oppositeQuaternion = new THREE.Quaternion().multiplyQuaternions(oppositeQuaternion, helper.quaternion);
-            if (DEBUG) {
-                var s = size.x / 10;
-                var arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), s, color, s / 2, s / 2);
-                helper.arrow = arrow;
-                helper.add(arrow);
+                model = item.model;
+            var position = new THREE.Vector3();
+            if (item.flipped) {
+                // model.quaternion.copy(item.joints.right.oquaternion);
+                item.joints.right.localToWorld(position);
+                item.inner.worldToLocal(position);
+                position.x -= item.size.x / 2;
+            } else {
+                // model.quaternion.copy(item.joints.left.oquaternion);
+                item.joints.left.localToWorld(position);
+                item.inner.worldToLocal(position);
+                position.x += item.size.x / 2;
             }
-            return helper;
+            item.model.position.sub(position);
+            console.log('position', position);
         }
 
         function flip(callback) {
             var item = this,
-                model = item.model;
+                inner = item.inner;
             // console.log('flip()');
             item.flipped = !item.flipped;
-            TweenLite.to(model.rotation, 0.3, {
+            TweenLite.to(inner.rotation, 0.3, {
                 y: item.flipped ? Math.PI : 0,
                 ease: Power2.easeOut,
                 overwrite: 'all',
@@ -240,7 +230,7 @@
                 // onUpdate: function() { },
                 onComplete: function () {
                     // console.log('flipped');
-                    // item.group.updateMatrixWorld();
+                    item.setFlip();
                     if (typeof callback === 'function') {
                         callback();
                     }
@@ -271,7 +261,7 @@
                     color: 0xff0000
                 })
             );
-            if (DEBUG) {
+            if (DEBUG_HELPER) {
                 combiner.scene.add(combiner.boxhelper);
                 combiner.scene.add(combiner.centerhelper);
             }
@@ -325,6 +315,7 @@
             });
             group.add(item.group);
             combiner.adjust();
+            item.setFlip();
             return item;
         }
 
@@ -372,44 +363,6 @@
             }
         }
 
-        function __combine() {
-            var combiner = this,
-                items = combiner.items,
-                group = combiner.group;
-            var previousQuaternion = new THREE.Quaternion();
-            var nextQuaternion = new THREE.Quaternion();
-            var previousPosition = new THREE.Vector3();
-            var groupPosition = new THREE.Vector3();
-            var lquaternion, right;
-
-            function combineItem(item, i) {
-                // item.inner.position.x += (0 - item.inner.position.x) / 5;
-                if (item.flipped) {
-                    lquaternion = item.rquaternion;
-                    right = item.left;
-                } else {
-                    lquaternion = item.lquaternion;
-                    right = item.right;
-                }
-                if (i > 0) {
-                    item.group.position.copy(previousPosition.sub(groupPosition));
-                    item.group.setRotationFromQuaternion(previousQuaternion.multiply(lquaternion));
-                    item.group.updateMatrixWorld();
-                }
-                /*
-                if (i === 1) {
-                    item.model.rotation.x += 0.01;
-                }
-                */
-                right.getWorldQuaternion(previousQuaternion);
-                right.getWorldPosition(previousPosition);
-            }
-            if (items.length) {
-                group.getWorldPosition(groupPosition);
-                items.filter(combineItem);
-            }
-        }
-
         function combine() {
             var combiner = this,
                 items = combiner.items,
@@ -418,25 +371,27 @@
             var nextQuaternion = new THREE.Quaternion();
             var previousPosition = new THREE.Vector3();
             var groupPosition = new THREE.Vector3();
-            var lquaternion, right;
+            var lquaternion, left, right;
 
             function combineItem(item, i) {
-                // item.inner.position.x += (0 - item.inner.position.x) / 5;
                 if (item.flipped) {
                     lquaternion = item.joints.right.quaternion;
+                    left = item.joints.right;
                     right = item.joints.left;
                 } else {
                     lquaternion = item.joints.left.oquaternion;
+                    left = item.joints.left;
                     right = item.joints.right;
                 }
                 if (i > 0) {
-                    item.group.position.copy(previousPosition.sub(groupPosition));
+                    previousPosition.sub(groupPosition);
+                    item.group.position.copy(previousPosition);
                     item.group.setRotationFromQuaternion(previousQuaternion.multiply(lquaternion));
                     item.group.updateMatrixWorld();
                 }
                 /*
                 if (i === 1) {
-                    item.model.rotation.x += 0.01;
+                    item.outer.rotation.x += 0.01;
                 }
                 */
                 right.getWorldQuaternion(previousQuaternion);
@@ -479,7 +434,7 @@
             if (hitted.length) {
                 var index = hittables.indexOf(hitted[0].object);
                 var item = items[index];
-                var rotation = item.inner.rotation.clone();
+                var rotation = item.outer.rotation.clone();
                 item.model.material.emissive = new THREE.Color(0x888888);
                 // item.model.material.needsUpdate = true;
                 selection = {
