@@ -189,8 +189,19 @@
         return degree * RAD;
     }
 
+    THREE.Object3D.prototype.getOppositeQuaternion = function () {
+        var rotation = this.rotation.toVector3().multiplyScalar(-1);
+        // console.log('rotation', this.rotation);
+        // var euler = new THREE.Euler(rotation, 'XYZ');
+        // console.log('euler', euler);
+        var quaternion = new THREE.Quaternion();
+        // quaternion.setFromEuler(euler);
+        quaternion.setFromAxisAngle(rotation, Math.PI);
+        return quaternion;
+    };
+
     var flipQuaternion = new THREE.Quaternion();
-    flipQuaternion.setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI);
+    flipQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI);
 
     var CombinerItem = function () {
 
@@ -275,18 +286,21 @@
             for (var key in joints) {
                 joint = joints[key];
                 joint.position.copy(getCentroid(joint.vertices));
+                joint.origin = joint.position.clone();
                 // joint.diff.sub(joint.position);
                 joint.vertices = null;
             }
             if (!joints.left) {
                 joints.left = new THREE.Group();
                 joints.left.position.set(-size.x / 2, 0, 0);
+                joints.left.origin = joint.position.clone();
                 joints.left.normal = new THREE.Vector3(-1, 0, 0);
                 joints.left.c = colors[0];
             }
             if (!joints.right) {
                 joints.right = new THREE.Group();
                 joints.right.position.set(size.x / 2, 0, 0);
+                joints.right.origin = joint.position.clone();
                 joints.right.normal = new THREE.Vector3(1, 0, 0);
                 joints.right.c = colors[1];
             }
@@ -317,17 +331,29 @@
 
             var joints = item.getJoints(geometry, materials, size);
 
+            model.unflipped = model.quaternion.clone();
+            // model.flipped = new THREE.Quaternion().setFromUnitVectors(joints.left.normal, joints.right.normal);
+            var diffq = new THREE.Quaternion().setFromUnitVectors(joints.left.normal.clone().multiplyScalar(-1), joints.right.normal);
+            model.flipped = new THREE.Quaternion().multiplyQuaternions(model.unflipped, flipQuaternion).multiply(diffq.inverse());
+
             var material;
 
-            model.geometry.uvsNeedUpdate = true;
-            model.geometry.normalsNeedUpdate = true;
+            model.geometry.computeVertexNormals();
             model.geometry.verticesNeedUpdate = true;
+            model.geometry.uvsNeedUpdate = true;
+
+            // model.geometry.mergeVertices();
+
+            // model.geometry.computeFaceNormals();
+
+            // model.geometry.normalsNeedUpdate = true;
+            // model.geometry.uvsNeedUpdate = true;
 
             // model.geometry.computeMorphNormals();
-            model.geometry.computeFaceNormals();
-            model.geometry.computeVertexNormals();
-            model.geometry.computeBoundingBox();
-
+            /*            model.geometry.computeFaceNormals();
+                        model.geometry.computeVertexNormals();
+                        model.geometry.computeBoundingBox();
+            */
             // console.log(model);
 
             if (DEBUG_MODELS) {
@@ -359,6 +385,9 @@
                 if (DEBUG_ARROW) {
                     var s = size.x / 10;
                     var arrow = new THREE.ArrowHelper(new THREE.Vector3(1, 0, 0), new THREE.Vector3(), s, joint.c, s / 2, s / 2);
+                    // var q = joint.getOppositeQuaternion();
+                    // console.log('q', q);
+                    // arrow.setRotationFromQuaternion(q);
                     joint.arrow = arrow;
                     joint.add(arrow);
                 }
@@ -376,18 +405,24 @@
                 model = item.model;
             var position = new THREE.Vector3();
             if (item.flipped) {
-                // model.quaternion.copy(item.joints.right.oquaternion);
-                item.joints.right.localToWorld(position);
-                item.inner.worldToLocal(position);
-                position.x -= item.size.x / 2;
+                // model.quaternion.copy(item.joints.right.quaternion.conjugate());
+                // item.joints.right.localToWorld(position);
+                // item.pivot.worldToLocal(position);
+                // item.model.setRotationFromQuaternion(item.joints.right.quaternion.conjugate());
+                // item.model.position.set(0, 0, 0).sub(item.joints.right.origin);
+                // position.x -= item.size.x / 2;
+                // item.model.quaternion.setFromUnitVectors(item.joints.left.normal, item.joints.right.normal);
             } else {
-                // model.quaternion.copy(item.joints.left.oquaternion);
-                item.joints.left.localToWorld(position);
-                item.inner.worldToLocal(position);
-                position.x += item.size.x / 2;
+                // model.quaternion.copy(item.joints.left.quaternion.conjugate());
+                // item.joints.left.localToWorld(position);
+                // item.pivot.worldToLocal(position);
+                // item.model.setRotationFromQuaternion(item.joints.left.quaternion.conjugate());
+                // item.model.position.set(0, 0, 0).sub(item.joints.left.origin);
+                // position.x += item.size.x / 2;
+                // item.model.setRotationFromQuaternion(new THREE.Quaternion());
             }
-            item.model.position.sub(position);
-            console.log('position', position);
+            item.model.updateMatrixWorld();
+            console.log('setFlip', item.flipped, item.joints.left.quaternion);
         }
 
         function flip(callback) {
@@ -395,6 +430,26 @@
                 inner = item.inner;
             // console.log('flip()');
             item.flipped = !item.flipped;
+            var animation = {
+                pow: item.flipped ? 0 : 1
+            };
+            TweenLite.to(animation, 0.3, {
+                pow: item.flipped ? 1 : 0,
+                ease: Power2.easeOut,
+                overwrite: 'all',
+                // ease: Elastic.easeOut,
+                onUpdate: function () {
+                    THREE.Quaternion.slerp(item.model.unflipped, item.model.flipped, item.model.quaternion, animation.pow);
+                },
+                onComplete: function () {
+                    // console.log('flipped');
+                    // item.setFlip();
+                    if (typeof callback === 'function') {
+                        callback();
+                    }
+                },
+            });
+            /*
             TweenLite.to(inner.rotation, 0.3, {
                 y: item.flipped ? Math.PI : 0,
                 ease: Power2.easeOut,
@@ -409,6 +464,7 @@
                     }
                 },
             });
+            */
         }
 
         return CombinerItem;
@@ -455,23 +511,6 @@
             update: update,
         };
 
-        function update() {
-            var combiner = this,
-                group = combiner.group;
-            if (combiner.flipping === 0) {
-                // combiner.combine();
-                combiner.fit(group);
-            }
-        }
-
-        function adjust() {
-            var combiner = this,
-                group = combiner.group;
-            combiner.combine();
-            combiner.fit(group);
-            // combiner.fitCamera();
-        }
-
         function add(geometry, materials) {
             var combiner = this,
                 box = combiner.box,
@@ -492,48 +531,12 @@
             return item;
         }
 
-        function remove() {
+        function adjust() {
             var combiner = this,
-                items = combiner.items,
-                hittables = combiner.hittables,
                 group = combiner.group;
-            if (combiner.selection) {
-                var selection = combiner.selection;
-                var item = selection.item;
-                items.splice(selection.index, 1);
-                if (item.group.parent) {
-                    group.remove(item.group);
-                }
-                combiner.hittables = items.map(function (item) {
-                    return item.model;
-                });
-                combiner.unselect();
-                combiner.adjust();
-                if (items.length > selection.index) {
-                    items[selection.index].enter();
-                }
-                return item;
-            } else {
-                return combiner.pop();
-            }
-        }
-
-        function pop() {
-            var combiner = this,
-                items = combiner.items,
-                hittables = combiner.hittables,
-                group = combiner.group;
-            if (items.length) {
-                var item = items.pop();
-                if (item.group.parent) {
-                    group.remove(item.group);
-                }
-                combiner.hittables = items.map(function (item) {
-                    return item.model;
-                });
-                combiner.adjust();
-                return item;
-            }
+            combiner.combine();
+            combiner.fit(group);
+            // combiner.fitCamera();
         }
 
         function combine() {
@@ -543,6 +546,7 @@
             var previousQuaternion = new THREE.Quaternion();
             var nextQuaternion = new THREE.Quaternion();
             var previousPosition = new THREE.Vector3();
+            var nextPosition = new THREE.Vector3();
             var groupPosition = new THREE.Vector3();
             var lquaternion, left, right;
 
@@ -557,10 +561,26 @@
                     right = item.joints.right;
                 }
                 if (i > 0) {
+                    nextPosition = left.position.clone();
+                    item.model.localToWorld(nextPosition);
+                    item.group.worldToLocal(nextPosition);
+                    // console.log('left.position', nextPosition);
+
+                    // item.group.position.set(0, 0, 0);
+                    left.getWorldQuaternion(nextQuaternion);
+                    item.group.setRotationFromQuaternion(previousQuaternion);
+
+                    item.group.position.copy(previousPosition);
+                    item.group.position.sub(nextPosition);
+                    /*
                     previousPosition.sub(groupPosition);
                     item.group.position.copy(previousPosition);
-                    item.group.setRotationFromQuaternion(previousQuaternion.multiply(lquaternion));
+                    // item.group.setRotationFromQuaternion(previousQuaternion.multiply(lquaternion));
+                    item.group.setRotationFromQuaternion(previousQuaternion);
+                    */
                     item.group.updateMatrixWorld();
+                } else {
+                    item.group.rotation.z = rad(30);
                 }
                 /*
                 if (i === 1) {
@@ -596,6 +616,87 @@
             return size;
         }
 
+        function flip(callback) {
+            var combiner = this,
+                items = combiner.items,
+                hittables = combiner.hittables;
+            if (combiner.selection) {
+                combiner.flipItem(combiner.selection.item, callback);
+            }
+        }
+
+        function flipItem(item, callback) {
+            var combiner = this;
+            combiner.flipping++;
+            item.flip(function () {
+                combiner.flipping--;
+                combiner.adjust();
+                // combiner.unselect(); ???
+                if (typeof (callback) === 'function') {
+                    setTimeout(function () {
+                        callback();
+                    }, 100);
+                }
+            });
+        }
+
+        function hitAndFlip(raycaster, callback) {
+            var combiner = this,
+                items = combiner.items,
+                hittables = combiner.hittables;
+
+            var hitted = raycaster.intersectObjects(hittables);
+            if (hitted.length) {
+                var index = hittables.indexOf(hitted[0].object);
+                var item = items[index];
+                combiner.flipItem(item, callback);
+            }
+        }
+
+        function pop() {
+            var combiner = this,
+                items = combiner.items,
+                hittables = combiner.hittables,
+                group = combiner.group;
+            if (items.length) {
+                var item = items.pop();
+                if (item.group.parent) {
+                    group.remove(item.group);
+                }
+                combiner.hittables = items.map(function (item) {
+                    return item.model;
+                });
+                combiner.adjust();
+                return item;
+            }
+        }
+
+        function remove() {
+            var combiner = this,
+                items = combiner.items,
+                hittables = combiner.hittables,
+                group = combiner.group;
+            if (combiner.selection) {
+                var selection = combiner.selection;
+                var item = selection.item;
+                items.splice(selection.index, 1);
+                if (item.group.parent) {
+                    group.remove(item.group);
+                }
+                combiner.hittables = items.map(function (item) {
+                    return item.model;
+                });
+                combiner.unselect();
+                combiner.adjust();
+                if (items.length > selection.index) {
+                    items[selection.index].enter();
+                }
+                return item;
+            } else {
+                return combiner.pop();
+            }
+        }
+
         function select(raycaster) {
             var combiner = this,
                 items = combiner.items,
@@ -629,40 +730,12 @@
             }
         }
 
-        function flipItem(item, callback) {
-            var combiner = this;
-            combiner.flipping++;
-            item.flip(function () {
-                combiner.flipping--;
-                combiner.adjust();
-                // combiner.unselect(); ???
-                if (typeof (callback) === 'function') {
-                    setTimeout(function () {
-                        callback();
-                    }, 100);
-                }
-            });
-        }
-
-        function flip(callback) {
+        function update() {
             var combiner = this,
-                items = combiner.items,
-                hittables = combiner.hittables;
-            if (combiner.selection) {
-                combiner.flipItem(combiner.selection.item, callback);
-            }
-        }
-
-        function hitAndFlip(raycaster, callback) {
-            var combiner = this,
-                items = combiner.items,
-                hittables = combiner.hittables;
-
-            var hitted = raycaster.intersectObjects(hittables);
-            if (hitted.length) {
-                var index = hittables.indexOf(hitted[0].object);
-                var item = items[index];
-                combiner.flipItem(item, callback);
+                group = combiner.group;
+            if (combiner.flipping === 0) {
+                // combiner.combine();
+                combiner.fit(group);
             }
         }
 
@@ -1078,6 +1151,7 @@
 
     var renderer = new THREE.WebGLRenderer({
         alpha: true,
+        antialias: true,
     });
     renderer.setSize(container.offsetWidth, container.offsetHeight);
     container.appendChild(renderer.domElement);
