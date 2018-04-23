@@ -48607,1355 +48607,83 @@ var _gsScope = (typeof(module) !== "undefined" && module.exports && typeof(globa
 })));
 
 /**
- * @author qiao / https://github.com/qiao
- * @author mrdoob / http://mrdoob.com
  * @author alteredq / http://alteredqualia.com/
- * @author WestLangley / http://github.com/WestLangley
- * @author erich666 / http://erichaines.com
+ * @author mr.doob / http://mrdoob.com/
  */
 
-// This set of controls performs orbiting, dollying (zooming), and panning.
-// Unlike TrackballControls, it maintains the "up" direction object.up (+Y by default).
-//
-//    Orbit - left mouse / touch: one finger move
-//    Zoom - middle mouse, or mousewheel / touch: two finger spread or squish
-//    Pan - right mouse, or arrow keys / touch: three finger swipe
+var Detector = {
 
-THREE.OrbitControls = function ( object, domElement ) {
+	canvas: !! window.CanvasRenderingContext2D,
+	webgl: ( function () {
 
-	this.object = object;
+		try {
 
-	this.domElement = ( domElement !== undefined ) ? domElement : document;
+			var canvas = document.createElement( 'canvas' ); return !! ( window.WebGLRenderingContext && ( canvas.getContext( 'webgl' ) || canvas.getContext( 'experimental-webgl' ) ) );
 
-	// Set to false to disable this control
-	this.enabled = true;
-
-	// "target" sets the location of focus, where the object orbits around
-	this.target = new THREE.Vector3();
-
-	// How far you can dolly in and out ( PerspectiveCamera only )
-	this.minDistance = 0;
-	this.maxDistance = Infinity;
-
-	// How far you can zoom in and out ( OrthographicCamera only )
-	this.minZoom = 0;
-	this.maxZoom = Infinity;
-
-	// How far you can orbit vertically, upper and lower limits.
-	// Range is 0 to Math.PI radians.
-	this.minPolarAngle = 0; // radians
-	this.maxPolarAngle = Math.PI; // radians
-
-	// How far you can orbit horizontally, upper and lower limits.
-	// If set, must be a sub-interval of the interval [ - Math.PI, Math.PI ].
-	this.minAzimuthAngle = - Infinity; // radians
-	this.maxAzimuthAngle = Infinity; // radians
-
-	// Set to true to enable damping (inertia)
-	// If damping is enabled, you must call controls.update() in your animation loop
-	this.enableDamping = false;
-	this.dampingFactor = 0.25;
-
-	// This option actually enables dollying in and out; left as "zoom" for backwards compatibility.
-	// Set to false to disable zooming
-	this.enableZoom = true;
-	this.zoomSpeed = 1.0;
-
-	// Set to false to disable rotating
-	this.enableRotate = true;
-	this.rotateSpeed = 1.0;
-
-	// Set to false to disable panning
-	this.enablePan = true;
-	this.panSpeed = 1.0;
-	this.panningMode = THREE.ScreenSpacePanning; // alternate THREE.HorizontalPanning
-	this.keyPanSpeed = 7.0;	// pixels moved per arrow key push
-
-	// Set to true to automatically rotate around the target
-	// If auto-rotate is enabled, you must call controls.update() in your animation loop
-	this.autoRotate = false;
-	this.autoRotateSpeed = 2.0; // 30 seconds per round when fps is 60
-
-	// Set to false to disable use of the keys
-	this.enableKeys = true;
-
-	// The four arrow keys
-	this.keys = { LEFT: 37, UP: 38, RIGHT: 39, BOTTOM: 40 };
-
-	// Mouse buttons
-	this.mouseButtons = { ORBIT: THREE.MOUSE.LEFT, ZOOM: THREE.MOUSE.MIDDLE, PAN: THREE.MOUSE.RIGHT };
-
-	// for reset
-	this.target0 = this.target.clone();
-	this.position0 = this.object.position.clone();
-	this.zoom0 = this.object.zoom;
-
-	//
-	// public methods
-	//
-
-	this.getPolarAngle = function () {
-
-		return spherical.phi;
-
-	};
-
-	this.getAzimuthalAngle = function () {
-
-		return spherical.theta;
-
-	};
-
-	this.saveState = function () {
-
-		scope.target0.copy( scope.target );
-		scope.position0.copy( scope.object.position );
-		scope.zoom0 = scope.object.zoom;
-
-	};
-
-	this.reset = function () {
-
-		scope.target.copy( scope.target0 );
-		scope.object.position.copy( scope.position0 );
-		scope.object.zoom = scope.zoom0;
-
-		scope.object.updateProjectionMatrix();
-		scope.dispatchEvent( changeEvent );
-
-		scope.update();
-
-		state = STATE.NONE;
-
-	};
-
-	// this method is exposed, but perhaps it would be better if we can make it private...
-	this.update = function () {
-
-		var offset = new THREE.Vector3();
-
-		// so camera.up is the orbit axis
-		var quat = new THREE.Quaternion().setFromUnitVectors( object.up, new THREE.Vector3( 0, 1, 0 ) );
-		var quatInverse = quat.clone().inverse();
-
-		var lastPosition = new THREE.Vector3();
-		var lastQuaternion = new THREE.Quaternion();
-
-		return function update() {
-
-			var position = scope.object.position;
-
-			offset.copy( position ).sub( scope.target );
-
-			// rotate offset to "y-axis-is-up" space
-			offset.applyQuaternion( quat );
-
-			// angle from z-axis around y-axis
-			spherical.setFromVector3( offset );
-
-			if ( scope.autoRotate && state === STATE.NONE ) {
-
-				rotateLeft( getAutoRotationAngle() );
-
-			}
-
-			spherical.theta += sphericalDelta.theta;
-			spherical.phi += sphericalDelta.phi;
-
-			// restrict theta to be between desired limits
-			spherical.theta = Math.max( scope.minAzimuthAngle, Math.min( scope.maxAzimuthAngle, spherical.theta ) );
-
-			// restrict phi to be between desired limits
-			spherical.phi = Math.max( scope.minPolarAngle, Math.min( scope.maxPolarAngle, spherical.phi ) );
-
-			spherical.makeSafe();
-
-
-			spherical.radius *= scale;
-
-			// restrict radius to be between desired limits
-			spherical.radius = Math.max( scope.minDistance, Math.min( scope.maxDistance, spherical.radius ) );
-
-			// move target to panned location
-			scope.target.add( panOffset );
-
-			offset.setFromSpherical( spherical );
-
-			// rotate offset back to "camera-up-vector-is-up" space
-			offset.applyQuaternion( quatInverse );
-
-			position.copy( scope.target ).add( offset );
-
-			scope.object.lookAt( scope.target );
-
-			if ( scope.enableDamping === true ) {
-
-				sphericalDelta.theta *= ( 1 - scope.dampingFactor );
-				sphericalDelta.phi *= ( 1 - scope.dampingFactor );
-
-				panOffset.multiplyScalar( 1 - scope.dampingFactor );
-
-			} else {
-
-				sphericalDelta.set( 0, 0, 0 );
-
-				panOffset.set( 0, 0, 0 );
-
-			}
-
-			scale = 1;
-
-			// update condition is:
-			// min(camera displacement, camera rotation in radians)^2 > EPS
-			// using small-angle approximation cos(x/2) = 1 - x^2 / 8
-
-			if ( zoomChanged ||
-				lastPosition.distanceToSquared( scope.object.position ) > EPS ||
-				8 * ( 1 - lastQuaternion.dot( scope.object.quaternion ) ) > EPS ) {
-
-				scope.dispatchEvent( changeEvent );
-
-				lastPosition.copy( scope.object.position );
-				lastQuaternion.copy( scope.object.quaternion );
-				zoomChanged = false;
-
-				return true;
-
-			}
+		} catch ( e ) {
 
 			return false;
 
-		};
-
-	}();
-
-	this.dispose = function () {
-
-		scope.domElement.removeEventListener( 'contextmenu', onContextMenu, false );
-		scope.domElement.removeEventListener( 'mousedown', onMouseDown, false );
-		scope.domElement.removeEventListener( 'wheel', onMouseWheel, false );
-
-		scope.domElement.removeEventListener( 'touchstart', onTouchStart, false );
-		scope.domElement.removeEventListener( 'touchend', onTouchEnd, false );
-		scope.domElement.removeEventListener( 'touchmove', onTouchMove, false );
-
-		document.removeEventListener( 'mousemove', onMouseMove, false );
-		document.removeEventListener( 'mouseup', onMouseUp, false );
-
-		window.removeEventListener( 'keydown', onKeyDown, false );
-
-		//scope.dispatchEvent( { type: 'dispose' } ); // should this be added here?
-
-	};
-
-	//
-	// internals
-	//
-
-	var scope = this;
-
-	var changeEvent = { type: 'change' };
-	var startEvent = { type: 'start' };
-	var endEvent = { type: 'end' };
-
-	var STATE = { NONE: - 1, ROTATE: 0, DOLLY: 1, PAN: 2, TOUCH_ROTATE: 3, TOUCH_DOLLY: 4, TOUCH_PAN: 5 };
-
-	var state = STATE.NONE;
-
-	var EPS = 0.000001;
-
-	// current position in spherical coordinates
-	var spherical = new THREE.Spherical();
-	var sphericalDelta = new THREE.Spherical();
-
-	var scale = 1;
-	var panOffset = new THREE.Vector3();
-	var zoomChanged = false;
-
-	var rotateStart = new THREE.Vector2();
-	var rotateEnd = new THREE.Vector2();
-	var rotateDelta = new THREE.Vector2();
-
-	var panStart = new THREE.Vector2();
-	var panEnd = new THREE.Vector2();
-	var panDelta = new THREE.Vector2();
-
-	var dollyStart = new THREE.Vector2();
-	var dollyEnd = new THREE.Vector2();
-	var dollyDelta = new THREE.Vector2();
-
-	function getAutoRotationAngle() {
-
-		return 2 * Math.PI / 60 / 60 * scope.autoRotateSpeed;
-
-	}
-
-	function getZoomScale() {
-
-		return Math.pow( 0.95, scope.zoomSpeed );
-
-	}
-
-	function rotateLeft( angle ) {
-
-		sphericalDelta.theta -= angle;
-
-	}
-
-	function rotateUp( angle ) {
-
-		sphericalDelta.phi -= angle;
-
-	}
-
-	var panLeft = function () {
-
-		var v = new THREE.Vector3();
-
-		return function panLeft( distance, objectMatrix ) {
-
-			v.setFromMatrixColumn( objectMatrix, 0 ); // get X column of objectMatrix
-			v.multiplyScalar( - distance );
-
-			panOffset.add( v );
-
-		};
-
-	}();
-
-	var panUp = function () {
-
-		var v = new THREE.Vector3();
-
-		return function panUp( distance, objectMatrix ) {
-
-			switch ( scope.panningMode ) {
-
-				case THREE.ScreenSpacePanning:
-
-					v.setFromMatrixColumn( objectMatrix, 1 );
-					break;
-
-				case THREE.HorizontalPanning:
-
-					v.setFromMatrixColumn( objectMatrix, 0 );
-					v.crossVectors( scope.object.up, v );
-					break;
-
-			}
-
-			v.multiplyScalar( distance );
-
-			panOffset.add( v );
-
-		};
-
-	}();
-
-	// deltaX and deltaY are in pixels; right and down are positive
-	var pan = function () {
-
-		var offset = new THREE.Vector3();
-
-		return function pan( deltaX, deltaY ) {
-
-			var element = scope.domElement === document ? scope.domElement.body : scope.domElement;
-
-			if ( scope.object.isPerspectiveCamera ) {
-
-				// perspective
-				var position = scope.object.position;
-				offset.copy( position ).sub( scope.target );
-				var targetDistance = offset.length();
-
-				// half of the fov is center to top of screen
-				targetDistance *= Math.tan( ( scope.object.fov / 2 ) * Math.PI / 180.0 );
-
-				// we actually don't use screenWidth, since perspective camera is fixed to screen height
-				panLeft( 2 * deltaX * targetDistance / element.clientHeight, scope.object.matrix );
-				panUp( 2 * deltaY * targetDistance / element.clientHeight, scope.object.matrix );
-
-			} else if ( scope.object.isOrthographicCamera ) {
-
-				// orthographic
-				panLeft( deltaX * ( scope.object.right - scope.object.left ) / scope.object.zoom / element.clientWidth, scope.object.matrix );
-				panUp( deltaY * ( scope.object.top - scope.object.bottom ) / scope.object.zoom / element.clientHeight, scope.object.matrix );
-
-			} else {
-
-				// camera neither orthographic nor perspective
-				console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - pan disabled.' );
-				scope.enablePan = false;
-
-			}
-
-		};
-
-	}();
-
-	function dollyIn( dollyScale ) {
-
-		if ( scope.object.isPerspectiveCamera ) {
-
-			scale /= dollyScale;
-
-		} else if ( scope.object.isOrthographicCamera ) {
-
-			scope.object.zoom = Math.max( scope.minZoom, Math.min( scope.maxZoom, scope.object.zoom * dollyScale ) );
-			scope.object.updateProjectionMatrix();
-			zoomChanged = true;
-
-		} else {
-
-			console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.' );
-			scope.enableZoom = false;
+		}
+
+	} )(),
+	workers: !! window.Worker,
+	fileapi: window.File && window.FileReader && window.FileList && window.Blob,
+
+	getWebGLErrorMessage: function () {
+
+		var element = document.createElement( 'div' );
+		element.id = 'webgl-error-message';
+		element.style.fontFamily = 'monospace';
+		element.style.fontSize = '13px';
+		element.style.fontWeight = 'normal';
+		element.style.textAlign = 'center';
+		element.style.background = '#fff';
+		element.style.color = '#000';
+		element.style.padding = '1.5em';
+		element.style.width = '400px';
+		element.style.margin = '5em auto 0';
+
+		if ( ! this.webgl ) {
+
+			element.innerHTML = window.WebGLRenderingContext ? [
+				'Your graphics card does not seem to support <a href="http://khronos.org/webgl/wiki/Getting_a_WebGL_Implementation" style="color:#000">WebGL</a>.<br />',
+				'Find out how to get it <a href="http://get.webgl.org/" style="color:#000">here</a>.'
+			].join( '\n' ) : [
+				'Your browser does not seem to support <a href="http://khronos.org/webgl/wiki/Getting_a_WebGL_Implementation" style="color:#000">WebGL</a>.<br/>',
+				'Find out how to get it <a href="http://get.webgl.org/" style="color:#000">here</a>.'
+			].join( '\n' );
 
 		}
 
-	}
+		return element;
 
-	function dollyOut( dollyScale ) {
+	},
 
-		if ( scope.object.isPerspectiveCamera ) {
+	addGetWebGLMessage: function ( parameters ) {
 
-			scale *= dollyScale;
+		var parent, id, element;
 
-		} else if ( scope.object.isOrthographicCamera ) {
+		parameters = parameters || {};
 
-			scope.object.zoom = Math.max( scope.minZoom, Math.min( scope.maxZoom, scope.object.zoom / dollyScale ) );
-			scope.object.updateProjectionMatrix();
-			zoomChanged = true;
+		parent = parameters.parent !== undefined ? parameters.parent : document.body;
+		id = parameters.id !== undefined ? parameters.id : 'oldie';
 
-		} else {
+		element = Detector.getWebGLErrorMessage();
+		element.id = id;
 
-			console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.' );
-			scope.enableZoom = false;
-
-		}
+		parent.appendChild( element );
 
 	}
-
-	//
-	// event callbacks - update the object state
-	//
-
-	function handleMouseDownRotate( event ) {
-
-		//console.log( 'handleMouseDownRotate' );
-
-		rotateStart.set( event.clientX, event.clientY );
-
-	}
-
-	function handleMouseDownDolly( event ) {
-
-		//console.log( 'handleMouseDownDolly' );
-
-		dollyStart.set( event.clientX, event.clientY );
-
-	}
-
-	function handleMouseDownPan( event ) {
-
-		//console.log( 'handleMouseDownPan' );
-
-		panStart.set( event.clientX, event.clientY );
-
-	}
-
-	function handleMouseMoveRotate( event ) {
-
-		//console.log( 'handleMouseMoveRotate' );
-
-		rotateEnd.set( event.clientX, event.clientY );
-
-		rotateDelta.subVectors( rotateEnd, rotateStart ).multiplyScalar( scope.rotateSpeed );;
-
-		var element = scope.domElement === document ? scope.domElement.body : scope.domElement;
-
-		// rotating across whole screen goes 360 degrees around
-		rotateLeft( 2 * Math.PI * rotateDelta.x / element.clientWidth );
-
-		// rotating up and down along whole screen attempts to go 360, but limited to 180
-		rotateUp( 2 * Math.PI * rotateDelta.y / element.clientHeight );
-
-		rotateStart.copy( rotateEnd );
-
-		scope.update();
-
-	}
-
-	function handleMouseMoveDolly( event ) {
-
-		//console.log( 'handleMouseMoveDolly' );
-
-		dollyEnd.set( event.clientX, event.clientY );
-
-		dollyDelta.subVectors( dollyEnd, dollyStart );
-
-		if ( dollyDelta.y > 0 ) {
-
-			dollyIn( getZoomScale() );
-
-		} else if ( dollyDelta.y < 0 ) {
-
-			dollyOut( getZoomScale() );
-
-		}
-
-		dollyStart.copy( dollyEnd );
-
-		scope.update();
-
-	}
-
-	function handleMouseMovePan( event ) {
-
-		//console.log( 'handleMouseMovePan' );
-
-		panEnd.set( event.clientX, event.clientY );
-
-		panDelta.subVectors( panEnd, panStart ).multiplyScalar( scope.panSpeed );
-
-		pan( panDelta.x, panDelta.y );
-
-		panStart.copy( panEnd );
-
-		scope.update();
-
-	}
-
-	function handleMouseUp( event ) {
-
-		// console.log( 'handleMouseUp' );
-
-	}
-
-	function handleMouseWheel( event ) {
-
-		// console.log( 'handleMouseWheel' );
-
-		if ( event.deltaY < 0 ) {
-
-			dollyOut( getZoomScale() );
-
-		} else if ( event.deltaY > 0 ) {
-
-			dollyIn( getZoomScale() );
-
-		}
-
-		scope.update();
-
-	}
-
-	function handleKeyDown( event ) {
-
-		//console.log( 'handleKeyDown' );
-
-		switch ( event.keyCode ) {
-
-			case scope.keys.UP:
-				pan( 0, scope.keyPanSpeed );
-				scope.update();
-				break;
-
-			case scope.keys.BOTTOM:
-				pan( 0, - scope.keyPanSpeed );
-				scope.update();
-				break;
-
-			case scope.keys.LEFT:
-				pan( scope.keyPanSpeed, 0 );
-				scope.update();
-				break;
-
-			case scope.keys.RIGHT:
-				pan( - scope.keyPanSpeed, 0 );
-				scope.update();
-				break;
-
-		}
-
-	}
-
-	function handleTouchStartRotate( event ) {
-
-		//console.log( 'handleTouchStartRotate' );
-
-		rotateStart.set( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY );
-
-	}
-
-	function handleTouchStartDolly( event ) {
-
-		//console.log( 'handleTouchStartDolly' );
-
-		var dx = event.touches[ 0 ].pageX - event.touches[ 1 ].pageX;
-		var dy = event.touches[ 0 ].pageY - event.touches[ 1 ].pageY;
-
-		var distance = Math.sqrt( dx * dx + dy * dy );
-
-		dollyStart.set( 0, distance );
-
-	}
-
-	function handleTouchStartPan( event ) {
-
-		//console.log( 'handleTouchStartPan' );
-
-		panStart.set( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY );
-
-	}
-
-	function handleTouchMoveRotate( event ) {
-
-		//console.log( 'handleTouchMoveRotate' );
-
-		rotateEnd.set( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY );
-
-		rotateDelta.subVectors( rotateEnd, rotateStart ).multiplyScalar( scope.rotateSpeed );
-
-		var element = scope.domElement === document ? scope.domElement.body : scope.domElement;
-
-		// rotating across whole screen goes 360 degrees around
-		rotateLeft( 2 * Math.PI * rotateDelta.x / element.clientWidth );
-
-		// rotating up and down along whole screen attempts to go 360, but limited to 180
-		rotateUp( 2 * Math.PI * rotateDelta.y / element.clientHeight );
-
-		rotateStart.copy( rotateEnd );
-
-		scope.update();
-
-	}
-
-	function handleTouchMoveDolly( event ) {
-
-		//console.log( 'handleTouchMoveDolly' );
-
-		var dx = event.touches[ 0 ].pageX - event.touches[ 1 ].pageX;
-		var dy = event.touches[ 0 ].pageY - event.touches[ 1 ].pageY;
-
-		var distance = Math.sqrt( dx * dx + dy * dy );
-
-		dollyEnd.set( 0, distance );
-
-		dollyDelta.subVectors( dollyEnd, dollyStart );
-
-		if ( dollyDelta.y > 0 ) {
-
-			dollyOut( getZoomScale() );
-
-		} else if ( dollyDelta.y < 0 ) {
-
-			dollyIn( getZoomScale() );
-
-		}
-
-		dollyStart.copy( dollyEnd );
-
-		scope.update();
-
-	}
-
-	function handleTouchMovePan( event ) {
-
-		//console.log( 'handleTouchMovePan' );
-
-		panEnd.set( event.touches[ 0 ].pageX, event.touches[ 0 ].pageY );
-
-		panDelta.subVectors( panEnd, panStart ).multiplyScalar( scope.panSpeed );
-
-		pan( panDelta.x, panDelta.y );
-
-		panStart.copy( panEnd );
-
-		scope.update();
-
-	}
-
-	function handleTouchEnd( event ) {
-
-		//console.log( 'handleTouchEnd' );
-
-	}
-
-	//
-	// event handlers - FSM: listen for events and reset state
-	//
-
-	function onMouseDown( event ) {
-
-		if ( scope.enabled === false ) return;
-
-		event.preventDefault();
-
-		switch ( event.button ) {
-
-			case scope.mouseButtons.ORBIT:
-
-				if ( scope.enableRotate === false ) return;
-
-				handleMouseDownRotate( event );
-
-				state = STATE.ROTATE;
-
-				break;
-
-			case scope.mouseButtons.ZOOM:
-
-				if ( scope.enableZoom === false ) return;
-
-				handleMouseDownDolly( event );
-
-				state = STATE.DOLLY;
-
-				break;
-
-			case scope.mouseButtons.PAN:
-
-				if ( scope.enablePan === false ) return;
-
-				handleMouseDownPan( event );
-
-				state = STATE.PAN;
-
-				break;
-
-		}
-
-		if ( state !== STATE.NONE ) {
-
-			document.addEventListener( 'mousemove', onMouseMove, false );
-			document.addEventListener( 'mouseup', onMouseUp, false );
-
-			scope.dispatchEvent( startEvent );
-
-		}
-
-	}
-
-	function onMouseMove( event ) {
-
-		if ( scope.enabled === false ) return;
-
-		event.preventDefault();
-
-		switch ( state ) {
-
-			case STATE.ROTATE:
-
-				if ( scope.enableRotate === false ) return;
-
-				handleMouseMoveRotate( event );
-
-				break;
-
-			case STATE.DOLLY:
-
-				if ( scope.enableZoom === false ) return;
-
-				handleMouseMoveDolly( event );
-
-				break;
-
-			case STATE.PAN:
-
-				if ( scope.enablePan === false ) return;
-
-				handleMouseMovePan( event );
-
-				break;
-
-		}
-
-	}
-
-	function onMouseUp( event ) {
-
-		if ( scope.enabled === false ) return;
-
-		handleMouseUp( event );
-
-		document.removeEventListener( 'mousemove', onMouseMove, false );
-		document.removeEventListener( 'mouseup', onMouseUp, false );
-
-		scope.dispatchEvent( endEvent );
-
-		state = STATE.NONE;
-
-	}
-
-	function onMouseWheel( event ) {
-
-		if ( scope.enabled === false || scope.enableZoom === false || ( state !== STATE.NONE && state !== STATE.ROTATE ) ) return;
-
-		event.preventDefault();
-		event.stopPropagation();
-
-		scope.dispatchEvent( startEvent );
-
-		handleMouseWheel( event );
-
-		scope.dispatchEvent( endEvent );
-
-	}
-
-	function onKeyDown( event ) {
-
-		if ( scope.enabled === false || scope.enableKeys === false || scope.enablePan === false ) return;
-
-		handleKeyDown( event );
-
-	}
-
-	function onTouchStart( event ) {
-
-		if ( scope.enabled === false ) return;
-
-		switch ( event.touches.length ) {
-
-			case 1:	// one-fingered touch: rotate
-
-				if ( scope.enableRotate === false ) return;
-
-				handleTouchStartRotate( event );
-
-				state = STATE.TOUCH_ROTATE;
-
-				break;
-
-			case 2:	// two-fingered touch: dolly
-
-				if ( scope.enableZoom === false ) return;
-
-				handleTouchStartDolly( event );
-
-				state = STATE.TOUCH_DOLLY;
-
-				break;
-
-			case 3: // three-fingered touch: pan
-
-				if ( scope.enablePan === false ) return;
-
-				handleTouchStartPan( event );
-
-				state = STATE.TOUCH_PAN;
-
-				break;
-
-			default:
-
-				state = STATE.NONE;
-
-		}
-
-		if ( state !== STATE.NONE ) {
-
-			scope.dispatchEvent( startEvent );
-
-		}
-
-	}
-
-	function onTouchMove( event ) {
-
-		if ( scope.enabled === false ) return;
-
-		event.preventDefault();
-		event.stopPropagation();
-
-		switch ( event.touches.length ) {
-
-			case 1: // one-fingered touch: rotate
-
-				if ( scope.enableRotate === false ) return;
-				if ( state !== STATE.TOUCH_ROTATE ) return; // is this needed?...
-
-				handleTouchMoveRotate( event );
-
-				break;
-
-			case 2: // two-fingered touch: dolly
-
-				if ( scope.enableZoom === false ) return;
-				if ( state !== STATE.TOUCH_DOLLY ) return; // is this needed?...
-
-				handleTouchMoveDolly( event );
-
-				break;
-
-			case 3: // three-fingered touch: pan
-
-				if ( scope.enablePan === false ) return;
-				if ( state !== STATE.TOUCH_PAN ) return; // is this needed?...
-
-				handleTouchMovePan( event );
-
-				break;
-
-			default:
-
-				state = STATE.NONE;
-
-		}
-
-	}
-
-	function onTouchEnd( event ) {
-
-		if ( scope.enabled === false ) return;
-
-		handleTouchEnd( event );
-
-		scope.dispatchEvent( endEvent );
-
-		state = STATE.NONE;
-
-	}
-
-	function onContextMenu( event ) {
-
-		if ( scope.enabled === false ) return;
-
-		event.preventDefault();
-
-	}
-
-	//
-
-	scope.domElement.addEventListener( 'contextmenu', onContextMenu, false );
-
-	scope.domElement.addEventListener( 'mousedown', onMouseDown, false );
-	scope.domElement.addEventListener( 'wheel', onMouseWheel, false );
-
-	scope.domElement.addEventListener( 'touchstart', onTouchStart, false );
-	scope.domElement.addEventListener( 'touchend', onTouchEnd, false );
-	scope.domElement.addEventListener( 'touchmove', onTouchMove, false );
-
-	window.addEventListener( 'keydown', onKeyDown, false );
-
-	// force an update at start
-
-	this.update();
 
 };
 
-THREE.OrbitControls.prototype = Object.create( THREE.EventDispatcher.prototype );
-THREE.OrbitControls.prototype.constructor = THREE.OrbitControls;
+// browserify support
+if ( typeof module === 'object' ) {
 
-Object.defineProperties( THREE.OrbitControls.prototype, {
+	module.exports = Detector;
 
-	center: {
-
-		get: function () {
-
-			console.warn( 'THREE.OrbitControls: .center has been renamed to .target' );
-			return this.target;
-
-		}
-
-	},
-
-	// backward compatibility
-
-	noZoom: {
-
-		get: function () {
-
-			console.warn( 'THREE.OrbitControls: .noZoom has been deprecated. Use .enableZoom instead.' );
-			return ! this.enableZoom;
-
-		},
-
-		set: function ( value ) {
-
-			console.warn( 'THREE.OrbitControls: .noZoom has been deprecated. Use .enableZoom instead.' );
-			this.enableZoom = ! value;
-
-		}
-
-	},
-
-	noRotate: {
-
-		get: function () {
-
-			console.warn( 'THREE.OrbitControls: .noRotate has been deprecated. Use .enableRotate instead.' );
-			return ! this.enableRotate;
-
-		},
-
-		set: function ( value ) {
-
-			console.warn( 'THREE.OrbitControls: .noRotate has been deprecated. Use .enableRotate instead.' );
-			this.enableRotate = ! value;
-
-		}
-
-	},
-
-	noPan: {
-
-		get: function () {
-
-			console.warn( 'THREE.OrbitControls: .noPan has been deprecated. Use .enablePan instead.' );
-			return ! this.enablePan;
-
-		},
-
-		set: function ( value ) {
-
-			console.warn( 'THREE.OrbitControls: .noPan has been deprecated. Use .enablePan instead.' );
-			this.enablePan = ! value;
-
-		}
-
-	},
-
-	noKeys: {
-
-		get: function () {
-
-			console.warn( 'THREE.OrbitControls: .noKeys has been deprecated. Use .enableKeys instead.' );
-			return ! this.enableKeys;
-
-		},
-
-		set: function ( value ) {
-
-			console.warn( 'THREE.OrbitControls: .noKeys has been deprecated. Use .enableKeys instead.' );
-			this.enableKeys = ! value;
-
-		}
-
-	},
-
-	staticMoving: {
-
-		get: function () {
-
-			console.warn( 'THREE.OrbitControls: .staticMoving has been deprecated. Use .enableDamping instead.' );
-			return ! this.enableDamping;
-
-		},
-
-		set: function ( value ) {
-
-			console.warn( 'THREE.OrbitControls: .staticMoving has been deprecated. Use .enableDamping instead.' );
-			this.enableDamping = ! value;
-
-		}
-
-	},
-
-	dynamicDampingFactor: {
-
-		get: function () {
-
-			console.warn( 'THREE.OrbitControls: .dynamicDampingFactor has been renamed. Use .dampingFactor instead.' );
-			return this.dampingFactor;
-
-		},
-
-		set: function ( value ) {
-
-			console.warn( 'THREE.OrbitControls: .dynamicDampingFactor has been renamed. Use .dampingFactor instead.' );
-			this.dampingFactor = value;
-
-		}
-
-	}
-
-} );
-
-THREE.ScreenSpacePanning = 0;
-THREE.HorizontalPanning = 1;
-
-/*
- * @author zz85 / https://github.com/zz85
- * @author mrdoob / http://mrdoob.com
- * Running this will allow you to drag three.js objects around the screen.
- */
-
-THREE.DragControls = function ( _objects, _camera, _domElement ) {
-
-	if ( _objects instanceof THREE.Camera ) {
-
-		console.warn( 'THREE.DragControls: Constructor now expects ( objects, camera, domElement )' );
-		var temp = _objects; _objects = _camera; _camera = temp;
-
-	}
-
-	var _plane = new THREE.Plane();
-	var _raycaster = new THREE.Raycaster();
-
-	var _mouse = new THREE.Vector2();
-	var _offset = new THREE.Vector3();
-	var _intersection = new THREE.Vector3();
-
-	var _selected = null, _hovered = null;
-
-	//
-
-	var scope = this;
-
-	function activate() {
-
-		_domElement.addEventListener( 'mousemove', onDocumentMouseMove, false );
-		_domElement.addEventListener( 'mousedown', onDocumentMouseDown, false );
-		_domElement.addEventListener( 'mouseup', onDocumentMouseCancel, false );
-		_domElement.addEventListener( 'mouseleave', onDocumentMouseCancel, false );
-		_domElement.addEventListener( 'touchmove', onDocumentTouchMove, false );
-		_domElement.addEventListener( 'touchstart', onDocumentTouchStart, false );
-		_domElement.addEventListener( 'touchend', onDocumentTouchEnd, false );
-
-	}
-
-	function deactivate() {
-
-		_domElement.removeEventListener( 'mousemove', onDocumentMouseMove, false );
-		_domElement.removeEventListener( 'mousedown', onDocumentMouseDown, false );
-		_domElement.removeEventListener( 'mouseup', onDocumentMouseCancel, false );
-		_domElement.removeEventListener( 'mouseleave', onDocumentMouseCancel, false );
-		_domElement.removeEventListener( 'touchmove', onDocumentTouchMove, false );
-		_domElement.removeEventListener( 'touchstart', onDocumentTouchStart, false );
-		_domElement.removeEventListener( 'touchend', onDocumentTouchEnd, false );
-
-	}
-
-	function dispose() {
-
-		deactivate();
-
-	}
-
-	function onDocumentMouseMove( event ) {
-
-		event.preventDefault();
-
-		var rect = _domElement.getBoundingClientRect();
-
-		_mouse.x = ( ( event.clientX - rect.left ) / rect.width ) * 2 - 1;
-		_mouse.y = - ( ( event.clientY - rect.top ) / rect.height ) * 2 + 1;
-
-		_raycaster.setFromCamera( _mouse, _camera );
-
-		if ( _selected && scope.enabled ) {
-
-			if ( _raycaster.ray.intersectPlane( _plane, _intersection ) ) {
-
-				_selected.position.copy( _intersection.sub( _offset ) );
-
-			}
-
-			scope.dispatchEvent( { type: 'drag', object: _selected } );
-
-			return;
-
-		}
-
-		_raycaster.setFromCamera( _mouse, _camera );
-
-		var intersects = _raycaster.intersectObjects( _objects );
-
-		if ( intersects.length > 0 ) {
-
-			var object = intersects[ 0 ].object;
-
-			_plane.setFromNormalAndCoplanarPoint( _camera.getWorldDirection( _plane.normal ), object.position );
-
-			if ( _hovered !== object ) {
-
-				scope.dispatchEvent( { type: 'hoveron', object: object } );
-
-				_domElement.style.cursor = 'pointer';
-				_hovered = object;
-
-			}
-
-		} else {
-
-			if ( _hovered !== null ) {
-
-				scope.dispatchEvent( { type: 'hoveroff', object: _hovered } );
-
-				_domElement.style.cursor = 'auto';
-				_hovered = null;
-
-			}
-
-		}
-
-	}
-
-	function onDocumentMouseDown( event ) {
-
-		event.preventDefault();
-
-		_raycaster.setFromCamera( _mouse, _camera );
-
-		var intersects = _raycaster.intersectObjects( _objects );
-
-		if ( intersects.length > 0 ) {
-
-			_selected = intersects[ 0 ].object;
-
-			if ( _raycaster.ray.intersectPlane( _plane, _intersection ) ) {
-
-				_offset.copy( _intersection ).sub( _selected.position );
-
-			}
-
-			_domElement.style.cursor = 'move';
-
-			scope.dispatchEvent( { type: 'dragstart', object: _selected } );
-
-		}
-
-
-	}
-
-	function onDocumentMouseCancel( event ) {
-
-		event.preventDefault();
-
-		if ( _selected ) {
-
-			scope.dispatchEvent( { type: 'dragend', object: _selected } );
-
-			_selected = null;
-
-		}
-
-		_domElement.style.cursor = 'auto';
-
-	}
-
-	function onDocumentTouchMove( event ) {
-
-		event.preventDefault();
-		event = event.changedTouches[ 0 ];
-
-		var rect = _domElement.getBoundingClientRect();
-
-		_mouse.x = ( ( event.clientX - rect.left ) / rect.width ) * 2 - 1;
-		_mouse.y = - ( ( event.clientY - rect.top ) / rect.height ) * 2 + 1;
-
-		_raycaster.setFromCamera( _mouse, _camera );
-
-		if ( _selected && scope.enabled ) {
-
-			if ( _raycaster.ray.intersectPlane( _plane, _intersection ) ) {
-
-				_selected.position.copy( _intersection.sub( _offset ) );
-
-			}
-
-			scope.dispatchEvent( { type: 'drag', object: _selected } );
-
-			return;
-
-		}
-
-	}
-
-	function onDocumentTouchStart( event ) {
-
-		event.preventDefault();
-		event = event.changedTouches[ 0 ];
-
-		var rect = _domElement.getBoundingClientRect();
-
-		_mouse.x = ( ( event.clientX - rect.left ) / rect.width ) * 2 - 1;
-		_mouse.y = - ( ( event.clientY - rect.top ) / rect.height ) * 2 + 1;
-
-		_raycaster.setFromCamera( _mouse, _camera );
-
-		var intersects = _raycaster.intersectObjects( _objects );
-
-		if ( intersects.length > 0 ) {
-
-			_selected = intersects[ 0 ].object;
-
-			_plane.setFromNormalAndCoplanarPoint( _camera.getWorldDirection( _plane.normal ), _selected.position );
-
-			if ( _raycaster.ray.intersectPlane( _plane, _intersection ) ) {
-
-				_offset.copy( _intersection ).sub( _selected.position );
-
-			}
-
-			_domElement.style.cursor = 'move';
-
-			scope.dispatchEvent( { type: 'dragstart', object: _selected } );
-
-		}
-
-
-	}
-
-	function onDocumentTouchEnd( event ) {
-
-		event.preventDefault();
-
-		if ( _selected ) {
-
-			scope.dispatchEvent( { type: 'dragend', object: _selected } );
-
-			_selected = null;
-
-		}
-
-		_domElement.style.cursor = 'auto';
-
-	}
-
-	activate();
-
-	// API
-
-	this.enabled = true;
-
-	this.activate = activate;
-	this.deactivate = deactivate;
-	this.dispose = dispose;
-
-	// Backward compatibility
-
-	this.setObjects = function () {
-
-		console.error( 'THREE.DragControls: setObjects() has been removed.' );
-
-	};
-
-	this.on = function ( type, listener ) {
-
-		console.warn( 'THREE.DragControls: on() has been deprecated. Use addEventListener() instead.' );
-		scope.addEventListener( type, listener );
-
-	};
-
-	this.off = function ( type, listener ) {
-
-		console.warn( 'THREE.DragControls: off() has been deprecated. Use removeEventListener() instead.' );
-		scope.removeEventListener( type, listener );
-
-	};
-
-	this.notify = function ( type ) {
-
-		console.error( 'THREE.DragControls: notify() has been deprecated. Use dispatchEvent() instead.' );
-		scope.dispatchEvent( { type: type } );
-
-	};
-
-};
-
-THREE.DragControls.prototype = Object.create( THREE.EventDispatcher.prototype );
-THREE.DragControls.prototype.constructor = THREE.DragControls;
+}
 
 /**
  * @author mrdoob / http://mrdoob.com/
@@ -50988,79 +49716,3036 @@ THREE.Projector = function () {
 
 /**
  * @author alteredq / http://alteredqualia.com/
- * @author mr.doob / http://mrdoob.com/
+ *
+ * Full-screen textured quad shader
  */
 
-var Detector = {
+THREE.CopyShader = {
 
-	canvas: !! window.CanvasRenderingContext2D,
-	webgl: ( function () {
+	uniforms: {
 
-		try {
-
-			var canvas = document.createElement( 'canvas' ); return !! ( window.WebGLRenderingContext && ( canvas.getContext( 'webgl' ) || canvas.getContext( 'experimental-webgl' ) ) );
-
-		} catch ( e ) {
-
-			return false;
-
-		}
-
-	} )(),
-	workers: !! window.Worker,
-	fileapi: window.File && window.FileReader && window.FileList && window.Blob,
-
-	getWebGLErrorMessage: function () {
-
-		var element = document.createElement( 'div' );
-		element.id = 'webgl-error-message';
-		element.style.fontFamily = 'monospace';
-		element.style.fontSize = '13px';
-		element.style.fontWeight = 'normal';
-		element.style.textAlign = 'center';
-		element.style.background = '#fff';
-		element.style.color = '#000';
-		element.style.padding = '1.5em';
-		element.style.width = '400px';
-		element.style.margin = '5em auto 0';
-
-		if ( ! this.webgl ) {
-
-			element.innerHTML = window.WebGLRenderingContext ? [
-				'Your graphics card does not seem to support <a href="http://khronos.org/webgl/wiki/Getting_a_WebGL_Implementation" style="color:#000">WebGL</a>.<br />',
-				'Find out how to get it <a href="http://get.webgl.org/" style="color:#000">here</a>.'
-			].join( '\n' ) : [
-				'Your browser does not seem to support <a href="http://khronos.org/webgl/wiki/Getting_a_WebGL_Implementation" style="color:#000">WebGL</a>.<br/>',
-				'Find out how to get it <a href="http://get.webgl.org/" style="color:#000">here</a>.'
-			].join( '\n' );
-
-		}
-
-		return element;
+		"tDiffuse": { value: null },
+		"opacity":  { value: 1.0 }
 
 	},
 
-	addGetWebGLMessage: function ( parameters ) {
+	vertexShader: [
 
-		var parent, id, element;
+		"varying vec2 vUv;",
 
-		parameters = parameters || {};
+		"void main() {",
 
-		parent = parameters.parent !== undefined ? parameters.parent : document.body;
-		id = parameters.id !== undefined ? parameters.id : 'oldie';
+			"vUv = uv;",
+			"gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );",
 
-		element = Detector.getWebGLErrorMessage();
-		element.id = id;
+		"}"
 
-		parent.appendChild( element );
+	].join( "\n" ),
+
+	fragmentShader: [
+
+		"uniform float opacity;",
+
+		"uniform sampler2D tDiffuse;",
+
+		"varying vec2 vUv;",
+
+		"void main() {",
+
+			"vec4 texel = texture2D( tDiffuse, vUv );",
+			"gl_FragColor = opacity * texel;",
+
+		"}"
+
+	].join( "\n" )
+
+};
+
+/**
+ * @author alteredq / http://alteredqualia.com/
+ * @author davidedc / http://www.sketchpatch.net/
+ *
+ * NVIDIA FXAA by Timothy Lottes
+ * http://timothylottes.blogspot.com/2011/06/fxaa3-source-released.html
+ * - WebGL port by @supereggbert
+ * http://www.glge.org/demos/fxaa/
+ */
+
+THREE.FXAAShader = {
+
+	uniforms: {
+
+		"tDiffuse":   { value: null },
+		"resolution": { value: new THREE.Vector2( 1 / 1024, 1 / 512 ) }
+
+	},
+
+	vertexShader: [
+
+		"varying vec2 vUv;",
+
+		"void main() {",
+
+			"vUv = uv;",
+			"gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );",
+
+		"}"
+
+	].join( "\n" ),
+
+	fragmentShader: [
+        "precision highp float;",
+        "",
+        "uniform sampler2D tDiffuse;",
+        "",
+        "uniform vec2 resolution;",
+        "",
+        "varying vec2 vUv;",
+        "",
+        "// FXAA 3.11 implementation by NVIDIA, ported to WebGL by Agost Biro (biro@archilogic.com)",
+        "",
+        "//----------------------------------------------------------------------------------",
+        "// File:        es3-kepler\FXAA\assets\shaders/FXAA_DefaultES.frag",
+        "// SDK Version: v3.00",
+        "// Email:       gameworks@nvidia.com",
+        "// Site:        http://developer.nvidia.com/",
+        "//",
+        "// Copyright (c) 2014-2015, NVIDIA CORPORATION. All rights reserved.",
+        "//",
+        "// Redistribution and use in source and binary forms, with or without",
+        "// modification, are permitted provided that the following conditions",
+        "// are met:",
+        "//  * Redistributions of source code must retain the above copyright",
+        "//    notice, this list of conditions and the following disclaimer.",
+        "//  * Redistributions in binary form must reproduce the above copyright",
+        "//    notice, this list of conditions and the following disclaimer in the",
+        "//    documentation and/or other materials provided with the distribution.",
+        "//  * Neither the name of NVIDIA CORPORATION nor the names of its",
+        "//    contributors may be used to endorse or promote products derived",
+        "//    from this software without specific prior written permission.",
+        "//",
+        "// THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS ``AS IS'' AND ANY",
+        "// EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE",
+        "// IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR",
+        "// PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR",
+        "// CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,",
+        "// EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,",
+        "// PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR",
+        "// PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY",
+        "// OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT",
+        "// (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE",
+        "// OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.",
+        "//",
+        "//----------------------------------------------------------------------------------",
+        "",
+        "#define FXAA_PC 1",
+        "#define FXAA_GLSL_100 1",
+        "#define FXAA_QUALITY_PRESET 12",
+        "",
+        "#define FXAA_GREEN_AS_LUMA 1",
+        "",
+        "/*--------------------------------------------------------------------------*/",
+        "#ifndef FXAA_PC_CONSOLE",
+        "    //",
+        "    // The console algorithm for PC is included",
+        "    // for developers targeting really low spec machines.",
+        "    // Likely better to just run FXAA_PC, and use a really low preset.",
+        "    //",
+        "    #define FXAA_PC_CONSOLE 0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#ifndef FXAA_GLSL_120",
+        "    #define FXAA_GLSL_120 0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#ifndef FXAA_GLSL_130",
+        "    #define FXAA_GLSL_130 0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#ifndef FXAA_HLSL_3",
+        "    #define FXAA_HLSL_3 0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#ifndef FXAA_HLSL_4",
+        "    #define FXAA_HLSL_4 0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#ifndef FXAA_HLSL_5",
+        "    #define FXAA_HLSL_5 0",
+        "#endif",
+        "/*==========================================================================*/",
+        "#ifndef FXAA_GREEN_AS_LUMA",
+        "    //",
+        "    // For those using non-linear color,",
+        "    // and either not able to get luma in alpha, or not wanting to,",
+        "    // this enables FXAA to run using green as a proxy for luma.",
+        "    // So with this enabled, no need to pack luma in alpha.",
+        "    //",
+        "    // This will turn off AA on anything which lacks some amount of green.",
+        "    // Pure red and blue or combination of only R and B, will get no AA.",
+        "    //",
+        "    // Might want to lower the settings for both,",
+        "    //    fxaaConsoleEdgeThresholdMin",
+        "    //    fxaaQualityEdgeThresholdMin",
+        "    // In order to insure AA does not get turned off on colors",
+        "    // which contain a minor amount of green.",
+        "    //",
+        "    // 1 = On.",
+        "    // 0 = Off.",
+        "    //",
+        "    #define FXAA_GREEN_AS_LUMA 0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#ifndef FXAA_EARLY_EXIT",
+        "    //",
+        "    // Controls algorithm's early exit path.",
+        "    // On PS3 turning this ON adds 2 cycles to the shader.",
+        "    // On 360 turning this OFF adds 10ths of a millisecond to the shader.",
+        "    // Turning this off on console will result in a more blurry image.",
+        "    // So this defaults to on.",
+        "    //",
+        "    // 1 = On.",
+        "    // 0 = Off.",
+        "    //",
+        "    #define FXAA_EARLY_EXIT 1",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#ifndef FXAA_DISCARD",
+        "    //",
+        "    // Only valid for PC OpenGL currently.",
+        "    // Probably will not work when FXAA_GREEN_AS_LUMA = 1.",
+        "    //",
+        "    // 1 = Use discard on pixels which don't need AA.",
+        "    //     For APIs which enable concurrent TEX+ROP from same surface.",
+        "    // 0 = Return unchanged color on pixels which don't need AA.",
+        "    //",
+        "    #define FXAA_DISCARD 0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#ifndef FXAA_FAST_PIXEL_OFFSET",
+        "    //",
+        "    // Used for GLSL 120 only.",
+        "    //",
+        "    // 1 = GL API supports fast pixel offsets",
+        "    // 0 = do not use fast pixel offsets",
+        "    //",
+        "    #ifdef GL_EXT_gpu_shader4",
+        "        #define FXAA_FAST_PIXEL_OFFSET 1",
+        "    #endif",
+        "    #ifdef GL_NV_gpu_shader5",
+        "        #define FXAA_FAST_PIXEL_OFFSET 1",
+        "    #endif",
+        "    #ifdef GL_ARB_gpu_shader5",
+        "        #define FXAA_FAST_PIXEL_OFFSET 1",
+        "    #endif",
+        "    #ifndef FXAA_FAST_PIXEL_OFFSET",
+        "        #define FXAA_FAST_PIXEL_OFFSET 0",
+        "    #endif",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#ifndef FXAA_GATHER4_ALPHA",
+        "    //",
+        "    // 1 = API supports gather4 on alpha channel.",
+        "    // 0 = API does not support gather4 on alpha channel.",
+        "    //",
+        "    #if (FXAA_HLSL_5 == 1)",
+        "        #define FXAA_GATHER4_ALPHA 1",
+        "    #endif",
+        "    #ifdef GL_ARB_gpu_shader5",
+        "        #define FXAA_GATHER4_ALPHA 1",
+        "    #endif",
+        "    #ifdef GL_NV_gpu_shader5",
+        "        #define FXAA_GATHER4_ALPHA 1",
+        "    #endif",
+        "    #ifndef FXAA_GATHER4_ALPHA",
+        "        #define FXAA_GATHER4_ALPHA 0",
+        "    #endif",
+        "#endif",
+        "",
+        "",
+        "/*============================================================================",
+        "                        FXAA QUALITY - TUNING KNOBS",
+        "------------------------------------------------------------------------------",
+        "NOTE the other tuning knobs are now in the shader function inputs!",
+        "============================================================================*/",
+        "#ifndef FXAA_QUALITY_PRESET",
+        "    //",
+        "    // Choose the quality preset.",
+        "    // This needs to be compiled into the shader as it effects code.",
+        "    // Best option to include multiple presets is to",
+        "    // in each shader define the preset, then include this file.",
+        "    //",
+        "    // OPTIONS",
+        "    // -----------------------------------------------------------------------",
+        "    // 10 to 15 - default medium dither (10=fastest, 15=highest quality)",
+        "    // 20 to 29 - less dither, more expensive (20=fastest, 29=highest quality)",
+        "    // 39       - no dither, very expensive",
+        "    //",
+        "    // NOTES",
+        "    // -----------------------------------------------------------------------",
+        "    // 12 = slightly faster then FXAA 3.9 and higher edge quality (default)",
+        "    // 13 = about same speed as FXAA 3.9 and better than 12",
+        "    // 23 = closest to FXAA 3.9 visually and performance wise",
+        "    //  _ = the lowest digit is directly related to performance",
+        "    // _  = the highest digit is directly related to style",
+        "    //",
+        "    #define FXAA_QUALITY_PRESET 12",
+        "#endif",
+        "",
+        "",
+        "/*============================================================================",
+        "",
+        "                           FXAA QUALITY - PRESETS",
+        "",
+        "============================================================================*/",
+        "",
+        "/*============================================================================",
+        "                     FXAA QUALITY - MEDIUM DITHER PRESETS",
+        "============================================================================*/",
+        "#if (FXAA_QUALITY_PRESET == 10)",
+        "    #define FXAA_QUALITY_PS 3",
+        "    #define FXAA_QUALITY_P0 1.5",
+        "    #define FXAA_QUALITY_P1 3.0",
+        "    #define FXAA_QUALITY_P2 12.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 11)",
+        "    #define FXAA_QUALITY_PS 4",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 3.0",
+        "    #define FXAA_QUALITY_P3 12.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 12)",
+        "    #define FXAA_QUALITY_PS 5",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 4.0",
+        "    #define FXAA_QUALITY_P4 12.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 13)",
+        "    #define FXAA_QUALITY_PS 6",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 2.0",
+        "    #define FXAA_QUALITY_P4 4.0",
+        "    #define FXAA_QUALITY_P5 12.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 14)",
+        "    #define FXAA_QUALITY_PS 7",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 2.0",
+        "    #define FXAA_QUALITY_P4 2.0",
+        "    #define FXAA_QUALITY_P5 4.0",
+        "    #define FXAA_QUALITY_P6 12.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 15)",
+        "    #define FXAA_QUALITY_PS 8",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 2.0",
+        "    #define FXAA_QUALITY_P4 2.0",
+        "    #define FXAA_QUALITY_P5 2.0",
+        "    #define FXAA_QUALITY_P6 4.0",
+        "    #define FXAA_QUALITY_P7 12.0",
+        "#endif",
+        "",
+        "/*============================================================================",
+        "                     FXAA QUALITY - LOW DITHER PRESETS",
+        "============================================================================*/",
+        "#if (FXAA_QUALITY_PRESET == 20)",
+        "    #define FXAA_QUALITY_PS 3",
+        "    #define FXAA_QUALITY_P0 1.5",
+        "    #define FXAA_QUALITY_P1 2.0",
+        "    #define FXAA_QUALITY_P2 8.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 21)",
+        "    #define FXAA_QUALITY_PS 4",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 8.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 22)",
+        "    #define FXAA_QUALITY_PS 5",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 2.0",
+        "    #define FXAA_QUALITY_P4 8.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 23)",
+        "    #define FXAA_QUALITY_PS 6",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 2.0",
+        "    #define FXAA_QUALITY_P4 2.0",
+        "    #define FXAA_QUALITY_P5 8.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 24)",
+        "    #define FXAA_QUALITY_PS 7",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 2.0",
+        "    #define FXAA_QUALITY_P4 2.0",
+        "    #define FXAA_QUALITY_P5 3.0",
+        "    #define FXAA_QUALITY_P6 8.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 25)",
+        "    #define FXAA_QUALITY_PS 8",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 2.0",
+        "    #define FXAA_QUALITY_P4 2.0",
+        "    #define FXAA_QUALITY_P5 2.0",
+        "    #define FXAA_QUALITY_P6 4.0",
+        "    #define FXAA_QUALITY_P7 8.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 26)",
+        "    #define FXAA_QUALITY_PS 9",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 2.0",
+        "    #define FXAA_QUALITY_P4 2.0",
+        "    #define FXAA_QUALITY_P5 2.0",
+        "    #define FXAA_QUALITY_P6 2.0",
+        "    #define FXAA_QUALITY_P7 4.0",
+        "    #define FXAA_QUALITY_P8 8.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 27)",
+        "    #define FXAA_QUALITY_PS 10",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 2.0",
+        "    #define FXAA_QUALITY_P4 2.0",
+        "    #define FXAA_QUALITY_P5 2.0",
+        "    #define FXAA_QUALITY_P6 2.0",
+        "    #define FXAA_QUALITY_P7 2.0",
+        "    #define FXAA_QUALITY_P8 4.0",
+        "    #define FXAA_QUALITY_P9 8.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 28)",
+        "    #define FXAA_QUALITY_PS 11",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 2.0",
+        "    #define FXAA_QUALITY_P4 2.0",
+        "    #define FXAA_QUALITY_P5 2.0",
+        "    #define FXAA_QUALITY_P6 2.0",
+        "    #define FXAA_QUALITY_P7 2.0",
+        "    #define FXAA_QUALITY_P8 2.0",
+        "    #define FXAA_QUALITY_P9 4.0",
+        "    #define FXAA_QUALITY_P10 8.0",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_QUALITY_PRESET == 29)",
+        "    #define FXAA_QUALITY_PS 12",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.5",
+        "    #define FXAA_QUALITY_P2 2.0",
+        "    #define FXAA_QUALITY_P3 2.0",
+        "    #define FXAA_QUALITY_P4 2.0",
+        "    #define FXAA_QUALITY_P5 2.0",
+        "    #define FXAA_QUALITY_P6 2.0",
+        "    #define FXAA_QUALITY_P7 2.0",
+        "    #define FXAA_QUALITY_P8 2.0",
+        "    #define FXAA_QUALITY_P9 2.0",
+        "    #define FXAA_QUALITY_P10 4.0",
+        "    #define FXAA_QUALITY_P11 8.0",
+        "#endif",
+        "",
+        "/*============================================================================",
+        "                     FXAA QUALITY - EXTREME QUALITY",
+        "============================================================================*/",
+        "#if (FXAA_QUALITY_PRESET == 39)",
+        "    #define FXAA_QUALITY_PS 12",
+        "    #define FXAA_QUALITY_P0 1.0",
+        "    #define FXAA_QUALITY_P1 1.0",
+        "    #define FXAA_QUALITY_P2 1.0",
+        "    #define FXAA_QUALITY_P3 1.0",
+        "    #define FXAA_QUALITY_P4 1.0",
+        "    #define FXAA_QUALITY_P5 1.5",
+        "    #define FXAA_QUALITY_P6 2.0",
+        "    #define FXAA_QUALITY_P7 2.0",
+        "    #define FXAA_QUALITY_P8 2.0",
+        "    #define FXAA_QUALITY_P9 2.0",
+        "    #define FXAA_QUALITY_P10 4.0",
+        "    #define FXAA_QUALITY_P11 8.0",
+        "#endif",
+        "",
+        "",
+        "",
+        "/*============================================================================",
+        "",
+        "                                API PORTING",
+        "",
+        "============================================================================*/",
+        "#if (FXAA_GLSL_100 == 1) || (FXAA_GLSL_120 == 1) || (FXAA_GLSL_130 == 1)",
+        "    #define FxaaBool bool",
+        "    #define FxaaDiscard discard",
+        "    #define FxaaFloat float",
+        "    #define FxaaFloat2 vec2",
+        "    #define FxaaFloat3 vec3",
+        "    #define FxaaFloat4 vec4",
+        "    #define FxaaHalf float",
+        "    #define FxaaHalf2 vec2",
+        "    #define FxaaHalf3 vec3",
+        "    #define FxaaHalf4 vec4",
+        "    #define FxaaInt2 ivec2",
+        "    #define FxaaSat(x) clamp(x, 0.0, 1.0)",
+        "    #define FxaaTex sampler2D",
+        "#else",
+        "    #define FxaaBool bool",
+        "    #define FxaaDiscard clip(-1)",
+        "    #define FxaaFloat float",
+        "    #define FxaaFloat2 float2",
+        "    #define FxaaFloat3 float3",
+        "    #define FxaaFloat4 float4",
+        "    #define FxaaHalf half",
+        "    #define FxaaHalf2 half2",
+        "    #define FxaaHalf3 half3",
+        "    #define FxaaHalf4 half4",
+        "    #define FxaaSat(x) saturate(x)",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_GLSL_100 == 1)",
+        "  #define FxaaTexTop(t, p) texture2D(t, p, 0.0)",
+        "  #define FxaaTexOff(t, p, o, r) texture2D(t, p + (o * r), 0.0)",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_GLSL_120 == 1)",
+        "    // Requires,",
+        "    //  #version 120",
+        "    // And at least,",
+        "    //  #extension GL_EXT_gpu_shader4 : enable",
+        "    //  (or set FXAA_FAST_PIXEL_OFFSET 1 to work like DX9)",
+        "    #define FxaaTexTop(t, p) texture2DLod(t, p, 0.0)",
+        "    #if (FXAA_FAST_PIXEL_OFFSET == 1)",
+        "        #define FxaaTexOff(t, p, o, r) texture2DLodOffset(t, p, 0.0, o)",
+        "    #else",
+        "        #define FxaaTexOff(t, p, o, r) texture2DLod(t, p + (o * r), 0.0)",
+        "    #endif",
+        "    #if (FXAA_GATHER4_ALPHA == 1)",
+        "        // use #extension GL_ARB_gpu_shader5 : enable",
+        "        #define FxaaTexAlpha4(t, p) textureGather(t, p, 3)",
+        "        #define FxaaTexOffAlpha4(t, p, o) textureGatherOffset(t, p, o, 3)",
+        "        #define FxaaTexGreen4(t, p) textureGather(t, p, 1)",
+        "        #define FxaaTexOffGreen4(t, p, o) textureGatherOffset(t, p, o, 1)",
+        "    #endif",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_GLSL_130 == 1)",
+        "    // Requires \"#version 130\" or better",
+        "    #define FxaaTexTop(t, p) textureLod(t, p, 0.0)",
+        "    #define FxaaTexOff(t, p, o, r) textureLodOffset(t, p, 0.0, o)",
+        "    #if (FXAA_GATHER4_ALPHA == 1)",
+        "        // use #extension GL_ARB_gpu_shader5 : enable",
+        "        #define FxaaTexAlpha4(t, p) textureGather(t, p, 3)",
+        "        #define FxaaTexOffAlpha4(t, p, o) textureGatherOffset(t, p, o, 3)",
+        "        #define FxaaTexGreen4(t, p) textureGather(t, p, 1)",
+        "        #define FxaaTexOffGreen4(t, p, o) textureGatherOffset(t, p, o, 1)",
+        "    #endif",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_HLSL_3 == 1)",
+        "    #define FxaaInt2 float2",
+        "    #define FxaaTex sampler2D",
+        "    #define FxaaTexTop(t, p) tex2Dlod(t, float4(p, 0.0, 0.0))",
+        "    #define FxaaTexOff(t, p, o, r) tex2Dlod(t, float4(p + (o * r), 0, 0))",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_HLSL_4 == 1)",
+        "    #define FxaaInt2 int2",
+        "    struct FxaaTex { SamplerState smpl; Texture2D tex; };",
+        "    #define FxaaTexTop(t, p) t.tex.SampleLevel(t.smpl, p, 0.0)",
+        "    #define FxaaTexOff(t, p, o, r) t.tex.SampleLevel(t.smpl, p, 0.0, o)",
+        "#endif",
+        "/*--------------------------------------------------------------------------*/",
+        "#if (FXAA_HLSL_5 == 1)",
+        "    #define FxaaInt2 int2",
+        "    struct FxaaTex { SamplerState smpl; Texture2D tex; };",
+        "    #define FxaaTexTop(t, p) t.tex.SampleLevel(t.smpl, p, 0.0)",
+        "    #define FxaaTexOff(t, p, o, r) t.tex.SampleLevel(t.smpl, p, 0.0, o)",
+        "    #define FxaaTexAlpha4(t, p) t.tex.GatherAlpha(t.smpl, p)",
+        "    #define FxaaTexOffAlpha4(t, p, o) t.tex.GatherAlpha(t.smpl, p, o)",
+        "    #define FxaaTexGreen4(t, p) t.tex.GatherGreen(t.smpl, p)",
+        "    #define FxaaTexOffGreen4(t, p, o) t.tex.GatherGreen(t.smpl, p, o)",
+        "#endif",
+        "",
+        "",
+        "/*============================================================================",
+        "                   GREEN AS LUMA OPTION SUPPORT FUNCTION",
+        "============================================================================*/",
+        "#if (FXAA_GREEN_AS_LUMA == 0)",
+        "    FxaaFloat FxaaLuma(FxaaFloat4 rgba) { return rgba.w; }",
+        "#else",
+        "    FxaaFloat FxaaLuma(FxaaFloat4 rgba) { return rgba.y; }",
+        "#endif",
+        "",
+        "",
+        "",
+        "",
+        "/*============================================================================",
+        "",
+        "                             FXAA3 QUALITY - PC",
+        "",
+        "============================================================================*/",
+        "#if (FXAA_PC == 1)",
+        "/*--------------------------------------------------------------------------*/",
+        "FxaaFloat4 FxaaPixelShader(",
+        "    //",
+        "    // Use noperspective interpolation here (turn off perspective interpolation).",
+        "    // {xy} = center of pixel",
+        "    FxaaFloat2 pos,",
+        "    //",
+        "    // Used only for FXAA Console, and not used on the 360 version.",
+        "    // Use noperspective interpolation here (turn off perspective interpolation).",
+        "    // {xy_} = upper left of pixel",
+        "    // {_zw} = lower right of pixel",
+        "    FxaaFloat4 fxaaConsolePosPos,",
+        "    //",
+        "    // Input color texture.",
+        "    // {rgb_} = color in linear or perceptual color space",
+        "    // if (FXAA_GREEN_AS_LUMA == 0)",
+        "    //     {__a} = luma in perceptual color space (not linear)",
+        "    FxaaTex tex,",
+        "    //",
+        "    // Only used on the optimized 360 version of FXAA Console.",
+        "    // For everything but 360, just use the same input here as for \"tex\".",
+        "    // For 360, same texture, just alias with a 2nd sampler.",
+        "    // This sampler needs to have an exponent bias of -1.",
+        "    FxaaTex fxaaConsole360TexExpBiasNegOne,",
+        "    //",
+        "    // Only used on the optimized 360 version of FXAA Console.",
+        "    // For everything but 360, just use the same input here as for \"tex\".",
+        "    // For 360, same texture, just alias with a 3nd sampler.",
+        "    // This sampler needs to have an exponent bias of -2.",
+        "    FxaaTex fxaaConsole360TexExpBiasNegTwo,",
+        "    //",
+        "    // Only used on FXAA Quality.",
+        "    // This must be from a constant/uniform.",
+        "    // {x_} = 1.0/screenWidthInPixels",
+        "    // {_y} = 1.0/screenHeightInPixels",
+        "    FxaaFloat2 fxaaQualityRcpFrame,",
+        "    //",
+        "    // Only used on FXAA Console.",
+        "    // This must be from a constant/uniform.",
+        "    // This effects sub-pixel AA quality and inversely sharpness.",
+        "    //   Where N ranges between,",
+        "    //     N = 0.50 (default)",
+        "    //     N = 0.33 (sharper)",
+        "    // {x__} = -N/screenWidthInPixels",
+        "    // {_y_} = -N/screenHeightInPixels",
+        "    // {_z_} =  N/screenWidthInPixels",
+        "    // {__w} =  N/screenHeightInPixels",
+        "    FxaaFloat4 fxaaConsoleRcpFrameOpt,",
+        "    //",
+        "    // Only used on FXAA Console.",
+        "    // Not used on 360, but used on PS3 and PC.",
+        "    // This must be from a constant/uniform.",
+        "    // {x__} = -2.0/screenWidthInPixels",
+        "    // {_y_} = -2.0/screenHeightInPixels",
+        "    // {_z_} =  2.0/screenWidthInPixels",
+        "    // {__w} =  2.0/screenHeightInPixels",
+        "    FxaaFloat4 fxaaConsoleRcpFrameOpt2,",
+        "    //",
+        "    // Only used on FXAA Console.",
+        "    // Only used on 360 in place of fxaaConsoleRcpFrameOpt2.",
+        "    // This must be from a constant/uniform.",
+        "    // {x__} =  8.0/screenWidthInPixels",
+        "    // {_y_} =  8.0/screenHeightInPixels",
+        "    // {_z_} = -4.0/screenWidthInPixels",
+        "    // {__w} = -4.0/screenHeightInPixels",
+        "    FxaaFloat4 fxaaConsole360RcpFrameOpt2,",
+        "    //",
+        "    // Only used on FXAA Quality.",
+        "    // This used to be the FXAA_QUALITY_SUBPIX define.",
+        "    // It is here now to allow easier tuning.",
+        "    // Choose the amount of sub-pixel aliasing removal.",
+        "    // This can effect sharpness.",
+        "    //   1.00 - upper limit (softer)",
+        "    //   0.75 - default amount of filtering",
+        "    //   0.50 - lower limit (sharper, less sub-pixel aliasing removal)",
+        "    //   0.25 - almost off",
+        "    //   0.00 - completely off",
+        "    FxaaFloat fxaaQualitySubpix,",
+        "    //",
+        "    // Only used on FXAA Quality.",
+        "    // This used to be the FXAA_QUALITY_EDGE_THRESHOLD define.",
+        "    // It is here now to allow easier tuning.",
+        "    // The minimum amount of local contrast required to apply algorithm.",
+        "    //   0.333 - too little (faster)",
+        "    //   0.250 - low quality",
+        "    //   0.166 - default",
+        "    //   0.125 - high quality",
+        "    //   0.063 - overkill (slower)",
+        "    FxaaFloat fxaaQualityEdgeThreshold,",
+        "    //",
+        "    // Only used on FXAA Quality.",
+        "    // This used to be the FXAA_QUALITY_EDGE_THRESHOLD_MIN define.",
+        "    // It is here now to allow easier tuning.",
+        "    // Trims the algorithm from processing darks.",
+        "    //   0.0833 - upper limit (default, the start of visible unfiltered edges)",
+        "    //   0.0625 - high quality (faster)",
+        "    //   0.0312 - visible limit (slower)",
+        "    // Special notes when using FXAA_GREEN_AS_LUMA,",
+        "    //   Likely want to set this to zero.",
+        "    //   As colors that are mostly not-green",
+        "    //   will appear very dark in the green channel!",
+        "    //   Tune by looking at mostly non-green content,",
+        "    //   then start at zero and increase until aliasing is a problem.",
+        "    FxaaFloat fxaaQualityEdgeThresholdMin,",
+        "    //",
+        "    // Only used on FXAA Console.",
+        "    // This used to be the FXAA_CONSOLE_EDGE_SHARPNESS define.",
+        "    // It is here now to allow easier tuning.",
+        "    // This does not effect PS3, as this needs to be compiled in.",
+        "    //   Use FXAA_CONSOLE_PS3_EDGE_SHARPNESS for PS3.",
+        "    //   Due to the PS3 being ALU bound,",
+        "    //   there are only three safe values here: 2 and 4 and 8.",
+        "    //   These options use the shaders ability to a free *|/ by 2|4|8.",
+        "    // For all other platforms can be a non-power of two.",
+        "    //   8.0 is sharper (default!!!)",
+        "    //   4.0 is softer",
+        "    //   2.0 is really soft (good only for vector graphics inputs)",
+        "    FxaaFloat fxaaConsoleEdgeSharpness,",
+        "    //",
+        "    // Only used on FXAA Console.",
+        "    // This used to be the FXAA_CONSOLE_EDGE_THRESHOLD define.",
+        "    // It is here now to allow easier tuning.",
+        "    // This does not effect PS3, as this needs to be compiled in.",
+        "    //   Use FXAA_CONSOLE_PS3_EDGE_THRESHOLD for PS3.",
+        "    //   Due to the PS3 being ALU bound,",
+        "    //   there are only two safe values here: 1/4 and 1/8.",
+        "    //   These options use the shaders ability to a free *|/ by 2|4|8.",
+        "    // The console setting has a different mapping than the quality setting.",
+        "    // Other platforms can use other values.",
+        "    //   0.125 leaves less aliasing, but is softer (default!!!)",
+        "    //   0.25 leaves more aliasing, and is sharper",
+        "    FxaaFloat fxaaConsoleEdgeThreshold,",
+        "    //",
+        "    // Only used on FXAA Console.",
+        "    // This used to be the FXAA_CONSOLE_EDGE_THRESHOLD_MIN define.",
+        "    // It is here now to allow easier tuning.",
+        "    // Trims the algorithm from processing darks.",
+        "    // The console setting has a different mapping than the quality setting.",
+        "    // This only applies when FXAA_EARLY_EXIT is 1.",
+        "    // This does not apply to PS3,",
+        "    // PS3 was simplified to avoid more shader instructions.",
+        "    //   0.06 - faster but more aliasing in darks",
+        "    //   0.05 - default",
+        "    //   0.04 - slower and less aliasing in darks",
+        "    // Special notes when using FXAA_GREEN_AS_LUMA,",
+        "    //   Likely want to set this to zero.",
+        "    //   As colors that are mostly not-green",
+        "    //   will appear very dark in the green channel!",
+        "    //   Tune by looking at mostly non-green content,",
+        "    //   then start at zero and increase until aliasing is a problem.",
+        "    FxaaFloat fxaaConsoleEdgeThresholdMin,",
+        "    //",
+        "    // Extra constants for 360 FXAA Console only.",
+        "    // Use zeros or anything else for other platforms.",
+        "    // These must be in physical constant registers and NOT immedates.",
+        "    // Immedates will result in compiler un-optimizing.",
+        "    // {xyzw} = float4(1.0, -1.0, 0.25, -0.25)",
+        "    FxaaFloat4 fxaaConsole360ConstDir",
+        ") {",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaFloat2 posM;",
+        "    posM.x = pos.x;",
+        "    posM.y = pos.y;",
+        "    #if (FXAA_GATHER4_ALPHA == 1)",
+        "        #if (FXAA_DISCARD == 0)",
+        "            FxaaFloat4 rgbyM = FxaaTexTop(tex, posM);",
+        "            #if (FXAA_GREEN_AS_LUMA == 0)",
+        "                #define lumaM rgbyM.w",
+        "            #else",
+        "                #define lumaM rgbyM.y",
+        "            #endif",
+        "        #endif",
+        "        #if (FXAA_GREEN_AS_LUMA == 0)",
+        "            FxaaFloat4 luma4A = FxaaTexAlpha4(tex, posM);",
+        "            FxaaFloat4 luma4B = FxaaTexOffAlpha4(tex, posM, FxaaInt2(-1, -1));",
+        "        #else",
+        "            FxaaFloat4 luma4A = FxaaTexGreen4(tex, posM);",
+        "            FxaaFloat4 luma4B = FxaaTexOffGreen4(tex, posM, FxaaInt2(-1, -1));",
+        "        #endif",
+        "        #if (FXAA_DISCARD == 1)",
+        "            #define lumaM luma4A.w",
+        "        #endif",
+        "        #define lumaE luma4A.z",
+        "        #define lumaS luma4A.x",
+        "        #define lumaSE luma4A.y",
+        "        #define lumaNW luma4B.w",
+        "        #define lumaN luma4B.z",
+        "        #define lumaW luma4B.x",
+        "    #else",
+        "        FxaaFloat4 rgbyM = FxaaTexTop(tex, posM);",
+        "        #if (FXAA_GREEN_AS_LUMA == 0)",
+        "            #define lumaM rgbyM.w",
+        "        #else",
+        "            #define lumaM rgbyM.y",
+        "        #endif",
+        "        #if (FXAA_GLSL_100 == 1)",
+        "          FxaaFloat lumaS = FxaaLuma(FxaaTexOff(tex, posM, FxaaFloat2( 0.0, 1.0), fxaaQualityRcpFrame.xy));",
+        "          FxaaFloat lumaE = FxaaLuma(FxaaTexOff(tex, posM, FxaaFloat2( 1.0, 0.0), fxaaQualityRcpFrame.xy));",
+        "          FxaaFloat lumaN = FxaaLuma(FxaaTexOff(tex, posM, FxaaFloat2( 0.0,-1.0), fxaaQualityRcpFrame.xy));",
+        "          FxaaFloat lumaW = FxaaLuma(FxaaTexOff(tex, posM, FxaaFloat2(-1.0, 0.0), fxaaQualityRcpFrame.xy));",
+        "        #else",
+        "          FxaaFloat lumaS = FxaaLuma(FxaaTexOff(tex, posM, FxaaInt2( 0, 1), fxaaQualityRcpFrame.xy));",
+        "          FxaaFloat lumaE = FxaaLuma(FxaaTexOff(tex, posM, FxaaInt2( 1, 0), fxaaQualityRcpFrame.xy));",
+        "          FxaaFloat lumaN = FxaaLuma(FxaaTexOff(tex, posM, FxaaInt2( 0,-1), fxaaQualityRcpFrame.xy));",
+        "          FxaaFloat lumaW = FxaaLuma(FxaaTexOff(tex, posM, FxaaInt2(-1, 0), fxaaQualityRcpFrame.xy));",
+        "        #endif",
+        "    #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaFloat maxSM = max(lumaS, lumaM);",
+        "    FxaaFloat minSM = min(lumaS, lumaM);",
+        "    FxaaFloat maxESM = max(lumaE, maxSM);",
+        "    FxaaFloat minESM = min(lumaE, minSM);",
+        "    FxaaFloat maxWN = max(lumaN, lumaW);",
+        "    FxaaFloat minWN = min(lumaN, lumaW);",
+        "    FxaaFloat rangeMax = max(maxWN, maxESM);",
+        "    FxaaFloat rangeMin = min(minWN, minESM);",
+        "    FxaaFloat rangeMaxScaled = rangeMax * fxaaQualityEdgeThreshold;",
+        "    FxaaFloat range = rangeMax - rangeMin;",
+        "    FxaaFloat rangeMaxClamped = max(fxaaQualityEdgeThresholdMin, rangeMaxScaled);",
+        "    FxaaBool earlyExit = range < rangeMaxClamped;",
+        "/*--------------------------------------------------------------------------*/",
+        "    if(earlyExit)",
+        "        #if (FXAA_DISCARD == 1)",
+        "            FxaaDiscard;",
+        "        #else",
+        "            return rgbyM;",
+        "        #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "    #if (FXAA_GATHER4_ALPHA == 0)",
+        "        #if (FXAA_GLSL_100 == 1)",
+        "          FxaaFloat lumaNW = FxaaLuma(FxaaTexOff(tex, posM, FxaaFloat2(-1.0,-1.0), fxaaQualityRcpFrame.xy));",
+        "          FxaaFloat lumaSE = FxaaLuma(FxaaTexOff(tex, posM, FxaaFloat2( 1.0, 1.0), fxaaQualityRcpFrame.xy));",
+        "          FxaaFloat lumaNE = FxaaLuma(FxaaTexOff(tex, posM, FxaaFloat2( 1.0,-1.0), fxaaQualityRcpFrame.xy));",
+        "          FxaaFloat lumaSW = FxaaLuma(FxaaTexOff(tex, posM, FxaaFloat2(-1.0, 1.0), fxaaQualityRcpFrame.xy));",
+        "        #else",
+        "          FxaaFloat lumaNW = FxaaLuma(FxaaTexOff(tex, posM, FxaaInt2(-1,-1), fxaaQualityRcpFrame.xy));",
+        "          FxaaFloat lumaSE = FxaaLuma(FxaaTexOff(tex, posM, FxaaInt2( 1, 1), fxaaQualityRcpFrame.xy));",
+        "          FxaaFloat lumaNE = FxaaLuma(FxaaTexOff(tex, posM, FxaaInt2( 1,-1), fxaaQualityRcpFrame.xy));",
+        "          FxaaFloat lumaSW = FxaaLuma(FxaaTexOff(tex, posM, FxaaInt2(-1, 1), fxaaQualityRcpFrame.xy));",
+        "        #endif",
+        "    #else",
+        "        FxaaFloat lumaNE = FxaaLuma(FxaaTexOff(tex, posM, FxaaInt2(1, -1), fxaaQualityRcpFrame.xy));",
+        "        FxaaFloat lumaSW = FxaaLuma(FxaaTexOff(tex, posM, FxaaInt2(-1, 1), fxaaQualityRcpFrame.xy));",
+        "    #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaFloat lumaNS = lumaN + lumaS;",
+        "    FxaaFloat lumaWE = lumaW + lumaE;",
+        "    FxaaFloat subpixRcpRange = 1.0/range;",
+        "    FxaaFloat subpixNSWE = lumaNS + lumaWE;",
+        "    FxaaFloat edgeHorz1 = (-2.0 * lumaM) + lumaNS;",
+        "    FxaaFloat edgeVert1 = (-2.0 * lumaM) + lumaWE;",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaFloat lumaNESE = lumaNE + lumaSE;",
+        "    FxaaFloat lumaNWNE = lumaNW + lumaNE;",
+        "    FxaaFloat edgeHorz2 = (-2.0 * lumaE) + lumaNESE;",
+        "    FxaaFloat edgeVert2 = (-2.0 * lumaN) + lumaNWNE;",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaFloat lumaNWSW = lumaNW + lumaSW;",
+        "    FxaaFloat lumaSWSE = lumaSW + lumaSE;",
+        "    FxaaFloat edgeHorz4 = (abs(edgeHorz1) * 2.0) + abs(edgeHorz2);",
+        "    FxaaFloat edgeVert4 = (abs(edgeVert1) * 2.0) + abs(edgeVert2);",
+        "    FxaaFloat edgeHorz3 = (-2.0 * lumaW) + lumaNWSW;",
+        "    FxaaFloat edgeVert3 = (-2.0 * lumaS) + lumaSWSE;",
+        "    FxaaFloat edgeHorz = abs(edgeHorz3) + edgeHorz4;",
+        "    FxaaFloat edgeVert = abs(edgeVert3) + edgeVert4;",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaFloat subpixNWSWNESE = lumaNWSW + lumaNESE;",
+        "    FxaaFloat lengthSign = fxaaQualityRcpFrame.x;",
+        "    FxaaBool horzSpan = edgeHorz >= edgeVert;",
+        "    FxaaFloat subpixA = subpixNSWE * 2.0 + subpixNWSWNESE;",
+        "/*--------------------------------------------------------------------------*/",
+        "    if(!horzSpan) lumaN = lumaW;",
+        "    if(!horzSpan) lumaS = lumaE;",
+        "    if(horzSpan) lengthSign = fxaaQualityRcpFrame.y;",
+        "    FxaaFloat subpixB = (subpixA * (1.0/12.0)) - lumaM;",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaFloat gradientN = lumaN - lumaM;",
+        "    FxaaFloat gradientS = lumaS - lumaM;",
+        "    FxaaFloat lumaNN = lumaN + lumaM;",
+        "    FxaaFloat lumaSS = lumaS + lumaM;",
+        "    FxaaBool pairN = abs(gradientN) >= abs(gradientS);",
+        "    FxaaFloat gradient = max(abs(gradientN), abs(gradientS));",
+        "    if(pairN) lengthSign = -lengthSign;",
+        "    FxaaFloat subpixC = FxaaSat(abs(subpixB) * subpixRcpRange);",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaFloat2 posB;",
+        "    posB.x = posM.x;",
+        "    posB.y = posM.y;",
+        "    FxaaFloat2 offNP;",
+        "    offNP.x = (!horzSpan) ? 0.0 : fxaaQualityRcpFrame.x;",
+        "    offNP.y = ( horzSpan) ? 0.0 : fxaaQualityRcpFrame.y;",
+        "    if(!horzSpan) posB.x += lengthSign * 0.5;",
+        "    if( horzSpan) posB.y += lengthSign * 0.5;",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaFloat2 posN;",
+        "    posN.x = posB.x - offNP.x * FXAA_QUALITY_P0;",
+        "    posN.y = posB.y - offNP.y * FXAA_QUALITY_P0;",
+        "    FxaaFloat2 posP;",
+        "    posP.x = posB.x + offNP.x * FXAA_QUALITY_P0;",
+        "    posP.y = posB.y + offNP.y * FXAA_QUALITY_P0;",
+        "    FxaaFloat subpixD = ((-2.0)*subpixC) + 3.0;",
+        "    FxaaFloat lumaEndN = FxaaLuma(FxaaTexTop(tex, posN));",
+        "    FxaaFloat subpixE = subpixC * subpixC;",
+        "    FxaaFloat lumaEndP = FxaaLuma(FxaaTexTop(tex, posP));",
+        "/*--------------------------------------------------------------------------*/",
+        "    if(!pairN) lumaNN = lumaSS;",
+        "    FxaaFloat gradientScaled = gradient * 1.0/4.0;",
+        "    FxaaFloat lumaMM = lumaM - lumaNN * 0.5;",
+        "    FxaaFloat subpixF = subpixD * subpixE;",
+        "    FxaaBool lumaMLTZero = lumaMM < 0.0;",
+        "/*--------------------------------------------------------------------------*/",
+        "    lumaEndN -= lumaNN * 0.5;",
+        "    lumaEndP -= lumaNN * 0.5;",
+        "    FxaaBool doneN = abs(lumaEndN) >= gradientScaled;",
+        "    FxaaBool doneP = abs(lumaEndP) >= gradientScaled;",
+        "    if(!doneN) posN.x -= offNP.x * FXAA_QUALITY_P1;",
+        "    if(!doneN) posN.y -= offNP.y * FXAA_QUALITY_P1;",
+        "    FxaaBool doneNP = (!doneN) || (!doneP);",
+        "    if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P1;",
+        "    if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P1;",
+        "/*--------------------------------------------------------------------------*/",
+        "    if(doneNP) {",
+        "        if(!doneN) lumaEndN = FxaaLuma(FxaaTexTop(tex, posN.xy));",
+        "        if(!doneP) lumaEndP = FxaaLuma(FxaaTexTop(tex, posP.xy));",
+        "        if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;",
+        "        if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;",
+        "        doneN = abs(lumaEndN) >= gradientScaled;",
+        "        doneP = abs(lumaEndP) >= gradientScaled;",
+        "        if(!doneN) posN.x -= offNP.x * FXAA_QUALITY_P2;",
+        "        if(!doneN) posN.y -= offNP.y * FXAA_QUALITY_P2;",
+        "        doneNP = (!doneN) || (!doneP);",
+        "        if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P2;",
+        "        if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P2;",
+        "/*--------------------------------------------------------------------------*/",
+        "        #if (FXAA_QUALITY_PS > 3)",
+        "        if(doneNP) {",
+        "            if(!doneN) lumaEndN = FxaaLuma(FxaaTexTop(tex, posN.xy));",
+        "            if(!doneP) lumaEndP = FxaaLuma(FxaaTexTop(tex, posP.xy));",
+        "            if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;",
+        "            if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;",
+        "            doneN = abs(lumaEndN) >= gradientScaled;",
+        "            doneP = abs(lumaEndP) >= gradientScaled;",
+        "            if(!doneN) posN.x -= offNP.x * FXAA_QUALITY_P3;",
+        "            if(!doneN) posN.y -= offNP.y * FXAA_QUALITY_P3;",
+        "            doneNP = (!doneN) || (!doneP);",
+        "            if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P3;",
+        "            if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P3;",
+        "/*--------------------------------------------------------------------------*/",
+        "            #if (FXAA_QUALITY_PS > 4)",
+        "            if(doneNP) {",
+        "                if(!doneN) lumaEndN = FxaaLuma(FxaaTexTop(tex, posN.xy));",
+        "                if(!doneP) lumaEndP = FxaaLuma(FxaaTexTop(tex, posP.xy));",
+        "                if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;",
+        "                if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;",
+        "                doneN = abs(lumaEndN) >= gradientScaled;",
+        "                doneP = abs(lumaEndP) >= gradientScaled;",
+        "                if(!doneN) posN.x -= offNP.x * FXAA_QUALITY_P4;",
+        "                if(!doneN) posN.y -= offNP.y * FXAA_QUALITY_P4;",
+        "                doneNP = (!doneN) || (!doneP);",
+        "                if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P4;",
+        "                if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P4;",
+        "/*--------------------------------------------------------------------------*/",
+        "                #if (FXAA_QUALITY_PS > 5)",
+        "                if(doneNP) {",
+        "                    if(!doneN) lumaEndN = FxaaLuma(FxaaTexTop(tex, posN.xy));",
+        "                    if(!doneP) lumaEndP = FxaaLuma(FxaaTexTop(tex, posP.xy));",
+        "                    if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;",
+        "                    if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;",
+        "                    doneN = abs(lumaEndN) >= gradientScaled;",
+        "                    doneP = abs(lumaEndP) >= gradientScaled;",
+        "                    if(!doneN) posN.x -= offNP.x * FXAA_QUALITY_P5;",
+        "                    if(!doneN) posN.y -= offNP.y * FXAA_QUALITY_P5;",
+        "                    doneNP = (!doneN) || (!doneP);",
+        "                    if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P5;",
+        "                    if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P5;",
+        "/*--------------------------------------------------------------------------*/",
+        "                    #if (FXAA_QUALITY_PS > 6)",
+        "                    if(doneNP) {",
+        "                        if(!doneN) lumaEndN = FxaaLuma(FxaaTexTop(tex, posN.xy));",
+        "                        if(!doneP) lumaEndP = FxaaLuma(FxaaTexTop(tex, posP.xy));",
+        "                        if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;",
+        "                        if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;",
+        "                        doneN = abs(lumaEndN) >= gradientScaled;",
+        "                        doneP = abs(lumaEndP) >= gradientScaled;",
+        "                        if(!doneN) posN.x -= offNP.x * FXAA_QUALITY_P6;",
+        "                        if(!doneN) posN.y -= offNP.y * FXAA_QUALITY_P6;",
+        "                        doneNP = (!doneN) || (!doneP);",
+        "                        if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P6;",
+        "                        if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P6;",
+        "/*--------------------------------------------------------------------------*/",
+        "                        #if (FXAA_QUALITY_PS > 7)",
+        "                        if(doneNP) {",
+        "                            if(!doneN) lumaEndN = FxaaLuma(FxaaTexTop(tex, posN.xy));",
+        "                            if(!doneP) lumaEndP = FxaaLuma(FxaaTexTop(tex, posP.xy));",
+        "                            if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;",
+        "                            if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;",
+        "                            doneN = abs(lumaEndN) >= gradientScaled;",
+        "                            doneP = abs(lumaEndP) >= gradientScaled;",
+        "                            if(!doneN) posN.x -= offNP.x * FXAA_QUALITY_P7;",
+        "                            if(!doneN) posN.y -= offNP.y * FXAA_QUALITY_P7;",
+        "                            doneNP = (!doneN) || (!doneP);",
+        "                            if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P7;",
+        "                            if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P7;",
+        "/*--------------------------------------------------------------------------*/",
+        "    #if (FXAA_QUALITY_PS > 8)",
+        "    if(doneNP) {",
+        "        if(!doneN) lumaEndN = FxaaLuma(FxaaTexTop(tex, posN.xy));",
+        "        if(!doneP) lumaEndP = FxaaLuma(FxaaTexTop(tex, posP.xy));",
+        "        if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;",
+        "        if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;",
+        "        doneN = abs(lumaEndN) >= gradientScaled;",
+        "        doneP = abs(lumaEndP) >= gradientScaled;",
+        "        if(!doneN) posN.x -= offNP.x * FXAA_QUALITY_P8;",
+        "        if(!doneN) posN.y -= offNP.y * FXAA_QUALITY_P8;",
+        "        doneNP = (!doneN) || (!doneP);",
+        "        if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P8;",
+        "        if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P8;",
+        "/*--------------------------------------------------------------------------*/",
+        "        #if (FXAA_QUALITY_PS > 9)",
+        "        if(doneNP) {",
+        "            if(!doneN) lumaEndN = FxaaLuma(FxaaTexTop(tex, posN.xy));",
+        "            if(!doneP) lumaEndP = FxaaLuma(FxaaTexTop(tex, posP.xy));",
+        "            if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;",
+        "            if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;",
+        "            doneN = abs(lumaEndN) >= gradientScaled;",
+        "            doneP = abs(lumaEndP) >= gradientScaled;",
+        "            if(!doneN) posN.x -= offNP.x * FXAA_QUALITY_P9;",
+        "            if(!doneN) posN.y -= offNP.y * FXAA_QUALITY_P9;",
+        "            doneNP = (!doneN) || (!doneP);",
+        "            if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P9;",
+        "            if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P9;",
+        "/*--------------------------------------------------------------------------*/",
+        "            #if (FXAA_QUALITY_PS > 10)",
+        "            if(doneNP) {",
+        "                if(!doneN) lumaEndN = FxaaLuma(FxaaTexTop(tex, posN.xy));",
+        "                if(!doneP) lumaEndP = FxaaLuma(FxaaTexTop(tex, posP.xy));",
+        "                if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;",
+        "                if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;",
+        "                doneN = abs(lumaEndN) >= gradientScaled;",
+        "                doneP = abs(lumaEndP) >= gradientScaled;",
+        "                if(!doneN) posN.x -= offNP.x * FXAA_QUALITY_P10;",
+        "                if(!doneN) posN.y -= offNP.y * FXAA_QUALITY_P10;",
+        "                doneNP = (!doneN) || (!doneP);",
+        "                if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P10;",
+        "                if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P10;",
+        "/*--------------------------------------------------------------------------*/",
+        "                #if (FXAA_QUALITY_PS > 11)",
+        "                if(doneNP) {",
+        "                    if(!doneN) lumaEndN = FxaaLuma(FxaaTexTop(tex, posN.xy));",
+        "                    if(!doneP) lumaEndP = FxaaLuma(FxaaTexTop(tex, posP.xy));",
+        "                    if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;",
+        "                    if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;",
+        "                    doneN = abs(lumaEndN) >= gradientScaled;",
+        "                    doneP = abs(lumaEndP) >= gradientScaled;",
+        "                    if(!doneN) posN.x -= offNP.x * FXAA_QUALITY_P11;",
+        "                    if(!doneN) posN.y -= offNP.y * FXAA_QUALITY_P11;",
+        "                    doneNP = (!doneN) || (!doneP);",
+        "                    if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P11;",
+        "                    if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P11;",
+        "/*--------------------------------------------------------------------------*/",
+        "                    #if (FXAA_QUALITY_PS > 12)",
+        "                    if(doneNP) {",
+        "                        if(!doneN) lumaEndN = FxaaLuma(FxaaTexTop(tex, posN.xy));",
+        "                        if(!doneP) lumaEndP = FxaaLuma(FxaaTexTop(tex, posP.xy));",
+        "                        if(!doneN) lumaEndN = lumaEndN - lumaNN * 0.5;",
+        "                        if(!doneP) lumaEndP = lumaEndP - lumaNN * 0.5;",
+        "                        doneN = abs(lumaEndN) >= gradientScaled;",
+        "                        doneP = abs(lumaEndP) >= gradientScaled;",
+        "                        if(!doneN) posN.x -= offNP.x * FXAA_QUALITY_P12;",
+        "                        if(!doneN) posN.y -= offNP.y * FXAA_QUALITY_P12;",
+        "                        doneNP = (!doneN) || (!doneP);",
+        "                        if(!doneP) posP.x += offNP.x * FXAA_QUALITY_P12;",
+        "                        if(!doneP) posP.y += offNP.y * FXAA_QUALITY_P12;",
+        "/*--------------------------------------------------------------------------*/",
+        "                    }",
+        "                    #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "                }",
+        "                #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "            }",
+        "            #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "        }",
+        "        #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "    }",
+        "    #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "                        }",
+        "                        #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "                    }",
+        "                    #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "                }",
+        "                #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "            }",
+        "            #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "        }",
+        "        #endif",
+        "/*--------------------------------------------------------------------------*/",
+        "    }",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaFloat dstN = posM.x - posN.x;",
+        "    FxaaFloat dstP = posP.x - posM.x;",
+        "    if(!horzSpan) dstN = posM.y - posN.y;",
+        "    if(!horzSpan) dstP = posP.y - posM.y;",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaBool goodSpanN = (lumaEndN < 0.0) != lumaMLTZero;",
+        "    FxaaFloat spanLength = (dstP + dstN);",
+        "    FxaaBool goodSpanP = (lumaEndP < 0.0) != lumaMLTZero;",
+        "    FxaaFloat spanLengthRcp = 1.0/spanLength;",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaBool directionN = dstN < dstP;",
+        "    FxaaFloat dst = min(dstN, dstP);",
+        "    FxaaBool goodSpan = directionN ? goodSpanN : goodSpanP;",
+        "    FxaaFloat subpixG = subpixF * subpixF;",
+        "    FxaaFloat pixelOffset = (dst * (-spanLengthRcp)) + 0.5;",
+        "    FxaaFloat subpixH = subpixG * fxaaQualitySubpix;",
+        "/*--------------------------------------------------------------------------*/",
+        "    FxaaFloat pixelOffsetGood = goodSpan ? pixelOffset : 0.0;",
+        "    FxaaFloat pixelOffsetSubpix = max(pixelOffsetGood, subpixH);",
+        "    if(!horzSpan) posM.x += pixelOffsetSubpix * lengthSign;",
+        "    if( horzSpan) posM.y += pixelOffsetSubpix * lengthSign;",
+        "    #if (FXAA_DISCARD == 1)",
+        "        return FxaaTexTop(tex, posM);",
+        "    #else",
+        "        return FxaaFloat4(FxaaTexTop(tex, posM).xyz, lumaM);",
+        "    #endif",
+        "}",
+        "/*==========================================================================*/",
+        "#endif",
+        "",
+        "void main() {",
+        "  gl_FragColor = FxaaPixelShader(",
+        "    vUv,",
+        "    vec4(0.0),",
+        "    tDiffuse,",
+        "    tDiffuse,",
+        "    tDiffuse,",
+        "    resolution,",
+        "    vec4(0.0),",
+        "    vec4(0.0),",
+        "    vec4(0.0),",
+        "    0.75,",
+        "    0.166,",
+        "    0.0833,",
+        "    0.0,",
+        "    0.0,",
+        "    0.0,",
+        "    vec4(0.0)",
+        "  );",
+        "",
+        "  // TODO avoid querying texture twice for same texel",
+        "  gl_FragColor.a = texture2D(tDiffuse, vUv).a;",
+        "}"
+	].join("\n")
+
+};
+
+/**
+ * @author alteredq / http://alteredqualia.com/
+ */
+
+THREE.EffectComposer = function ( renderer, renderTarget ) {
+
+	this.renderer = renderer;
+
+	if ( renderTarget === undefined ) {
+
+		var parameters = {
+			minFilter: THREE.LinearFilter,
+			magFilter: THREE.LinearFilter,
+			format: THREE.RGBAFormat,
+			stencilBuffer: false
+		};
+
+		var size = renderer.getDrawingBufferSize();
+		renderTarget = new THREE.WebGLRenderTarget( size.width, size.height, parameters );
+		renderTarget.texture.name = 'EffectComposer.rt1';
+
+	}
+
+	this.renderTarget1 = renderTarget;
+	this.renderTarget2 = renderTarget.clone();
+	this.renderTarget2.texture.name = 'EffectComposer.rt2';
+
+	this.writeBuffer = this.renderTarget1;
+	this.readBuffer = this.renderTarget2;
+
+	this.passes = [];
+
+	// dependencies
+
+	if ( THREE.CopyShader === undefined ) {
+
+		console.error( 'THREE.EffectComposer relies on THREE.CopyShader' );
+
+	}
+
+	if ( THREE.ShaderPass === undefined ) {
+
+		console.error( 'THREE.EffectComposer relies on THREE.ShaderPass' );
+
+	}
+
+	this.copyPass = new THREE.ShaderPass( THREE.CopyShader );
+
+};
+
+Object.assign( THREE.EffectComposer.prototype, {
+
+	swapBuffers: function () {
+
+		var tmp = this.readBuffer;
+		this.readBuffer = this.writeBuffer;
+		this.writeBuffer = tmp;
+
+	},
+
+	addPass: function ( pass ) {
+
+		this.passes.push( pass );
+
+		var size = this.renderer.getDrawingBufferSize();
+		pass.setSize( size.width, size.height );
+
+	},
+
+	insertPass: function ( pass, index ) {
+
+		this.passes.splice( index, 0, pass );
+
+	},
+
+	render: function ( delta ) {
+
+		var maskActive = false;
+
+		var pass, i, il = this.passes.length;
+
+		for ( i = 0; i < il; i ++ ) {
+
+			pass = this.passes[ i ];
+
+			if ( pass.enabled === false ) continue;
+
+			pass.render( this.renderer, this.writeBuffer, this.readBuffer, delta, maskActive );
+
+			if ( pass.needsSwap ) {
+
+				if ( maskActive ) {
+
+					var context = this.renderer.context;
+
+					context.stencilFunc( context.NOTEQUAL, 1, 0xffffffff );
+
+					this.copyPass.render( this.renderer, this.writeBuffer, this.readBuffer, delta );
+
+					context.stencilFunc( context.EQUAL, 1, 0xffffffff );
+
+				}
+
+				this.swapBuffers();
+
+			}
+
+			if ( THREE.MaskPass !== undefined ) {
+
+				if ( pass instanceof THREE.MaskPass ) {
+
+					maskActive = true;
+
+				} else if ( pass instanceof THREE.ClearMaskPass ) {
+
+					maskActive = false;
+
+				}
+
+			}
+
+		}
+
+	},
+
+	reset: function ( renderTarget ) {
+
+		if ( renderTarget === undefined ) {
+
+			var size = this.renderer.getDrawingBufferSize();
+
+			renderTarget = this.renderTarget1.clone();
+			renderTarget.setSize( size.width, size.height );
+
+		}
+
+		this.renderTarget1.dispose();
+		this.renderTarget2.dispose();
+		this.renderTarget1 = renderTarget;
+		this.renderTarget2 = renderTarget.clone();
+
+		this.writeBuffer = this.renderTarget1;
+		this.readBuffer = this.renderTarget2;
+
+	},
+
+	setSize: function ( width, height ) {
+
+		this.renderTarget1.setSize( width, height );
+		this.renderTarget2.setSize( width, height );
+
+		for ( var i = 0; i < this.passes.length; i ++ ) {
+
+			this.passes[ i ].setSize( width, height );
+
+		}
+
+	}
+
+} );
+
+
+THREE.Pass = function () {
+
+	// if set to true, the pass is processed by the composer
+	this.enabled = true;
+
+	// if set to true, the pass indicates to swap read and write buffer after rendering
+	this.needsSwap = true;
+
+	// if set to true, the pass clears its buffer before rendering
+	this.clear = false;
+
+	// if set to true, the result of the pass is rendered to screen
+	this.renderToScreen = false;
+
+};
+
+Object.assign( THREE.Pass.prototype, {
+
+	setSize: function ( width, height ) {},
+
+	render: function ( renderer, writeBuffer, readBuffer, delta, maskActive ) {
+
+		console.error( 'THREE.Pass: .render() must be implemented in derived pass.' );
+
+	}
+
+} );
+
+/**
+ * @author alteredq / http://alteredqualia.com/
+ */
+
+THREE.RenderPass = function ( scene, camera, overrideMaterial, clearColor, clearAlpha ) {
+
+	THREE.Pass.call( this );
+
+	this.scene = scene;
+	this.camera = camera;
+
+	this.overrideMaterial = overrideMaterial;
+
+	this.clearColor = clearColor;
+	this.clearAlpha = ( clearAlpha !== undefined ) ? clearAlpha : 0;
+
+	this.clear = true;
+	this.clearDepth = false;
+	this.needsSwap = false;
+
+};
+
+THREE.RenderPass.prototype = Object.assign( Object.create( THREE.Pass.prototype ), {
+
+	constructor: THREE.RenderPass,
+
+	render: function ( renderer, writeBuffer, readBuffer, delta, maskActive ) {
+
+		var oldAutoClear = renderer.autoClear;
+		renderer.autoClear = false;
+
+		this.scene.overrideMaterial = this.overrideMaterial;
+
+		var oldClearColor, oldClearAlpha;
+
+		if ( this.clearColor ) {
+
+			oldClearColor = renderer.getClearColor().getHex();
+			oldClearAlpha = renderer.getClearAlpha();
+
+			renderer.setClearColor( this.clearColor, this.clearAlpha );
+
+		}
+
+		if ( this.clearDepth ) {
+
+			renderer.clearDepth();
+
+		}
+
+		renderer.render( this.scene, this.camera, this.renderToScreen ? null : readBuffer, this.clear );
+
+		if ( this.clearColor ) {
+
+			renderer.setClearColor( oldClearColor, oldClearAlpha );
+
+		}
+
+		this.scene.overrideMaterial = null;
+		renderer.autoClear = oldAutoClear;
+	}
+
+} );
+
+/**
+ * @author alteredq / http://alteredqualia.com/
+ */
+
+THREE.ShaderPass = function ( shader, textureID ) {
+
+	THREE.Pass.call( this );
+
+	this.textureID = ( textureID !== undefined ) ? textureID : "tDiffuse";
+
+	if ( shader instanceof THREE.ShaderMaterial ) {
+
+		this.uniforms = shader.uniforms;
+
+		this.material = shader;
+
+	} else if ( shader ) {
+
+		this.uniforms = THREE.UniformsUtils.clone( shader.uniforms );
+
+		this.material = new THREE.ShaderMaterial( {
+
+			defines: Object.assign( {}, shader.defines ),
+			uniforms: this.uniforms,
+			vertexShader: shader.vertexShader,
+			fragmentShader: shader.fragmentShader
+
+		} );
+
+	}
+
+	this.camera = new THREE.OrthographicCamera( - 1, 1, 1, - 1, 0, 1 );
+	this.scene = new THREE.Scene();
+
+	this.quad = new THREE.Mesh( new THREE.PlaneBufferGeometry( 2, 2 ), null );
+	this.quad.frustumCulled = false; // Avoid getting clipped
+	this.scene.add( this.quad );
+
+};
+
+THREE.ShaderPass.prototype = Object.assign( Object.create( THREE.Pass.prototype ), {
+
+	constructor: THREE.ShaderPass,
+
+	render: function( renderer, writeBuffer, readBuffer, delta, maskActive ) {
+
+		if ( this.uniforms[ this.textureID ] ) {
+
+			this.uniforms[ this.textureID ].value = readBuffer.texture;
+
+		}
+
+		this.quad.material = this.material;
+
+		if ( this.renderToScreen ) {
+
+			renderer.render( this.scene, this.camera );
+
+		} else {
+
+			renderer.render( this.scene, this.camera, writeBuffer, this.clear );
+
+		}
+
+	}
+
+} );
+
+/**
+ * @author spidersharma / http://eduperiment.com/
+ */
+
+THREE.OutlinePass = function ( resolution, scene, camera, selectedObjects ) {
+
+	this.renderScene = scene;
+	this.renderCamera = camera;
+	this.selectedObjects = selectedObjects !== undefined ? selectedObjects : [];
+	this.visibleEdgeColor = new THREE.Color( 1, 1, 1 );
+	this.hiddenEdgeColor = new THREE.Color( 0.1, 0.04, 0.02 );
+	this.edgeGlow = 0.0;
+	this.usePatternTexture = false;
+	this.edgeThickness = 1.0;
+	this.edgeStrength = 3.0;
+	this.downSampleRatio = 2;
+	this.pulsePeriod = 0;
+
+	THREE.Pass.call( this );
+
+	this.resolution = ( resolution !== undefined ) ? new THREE.Vector2( resolution.x, resolution.y ) : new THREE.Vector2( 256, 256 );
+
+	var pars = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, format: THREE.RGBAFormat };
+
+	var resx = Math.round( this.resolution.x / this.downSampleRatio );
+	var resy = Math.round( this.resolution.y / this.downSampleRatio );
+
+	this.maskBufferMaterial = new THREE.MeshBasicMaterial( { color: 0xffffff } );
+	this.maskBufferMaterial.side = THREE.DoubleSide;
+	this.renderTargetMaskBuffer = new THREE.WebGLRenderTarget( this.resolution.x, this.resolution.y, pars );
+	this.renderTargetMaskBuffer.texture.name = "OutlinePass.mask";
+	this.renderTargetMaskBuffer.texture.generateMipmaps = false;
+
+	this.depthMaterial = new THREE.MeshDepthMaterial();
+	this.depthMaterial.side = THREE.DoubleSide;
+	this.depthMaterial.depthPacking = THREE.RGBADepthPacking;
+	this.depthMaterial.blending = THREE.NoBlending;
+
+	this.prepareMaskMaterial = this.getPrepareMaskMaterial();
+	this.prepareMaskMaterial.side = THREE.DoubleSide;
+	this.prepareMaskMaterial.fragmentShader = replaceDepthToViewZ( this.prepareMaskMaterial.fragmentShader, this.renderCamera );
+
+	this.renderTargetDepthBuffer = new THREE.WebGLRenderTarget( this.resolution.x, this.resolution.y, pars );
+	this.renderTargetDepthBuffer.texture.name = "OutlinePass.depth";
+	this.renderTargetDepthBuffer.texture.generateMipmaps = false;
+
+	this.renderTargetMaskDownSampleBuffer = new THREE.WebGLRenderTarget( resx, resy, pars );
+	this.renderTargetMaskDownSampleBuffer.texture.name = "OutlinePass.depthDownSample";
+	this.renderTargetMaskDownSampleBuffer.texture.generateMipmaps = false;
+
+	this.renderTargetBlurBuffer1 = new THREE.WebGLRenderTarget( resx, resy, pars );
+	this.renderTargetBlurBuffer1.texture.name = "OutlinePass.blur1";
+	this.renderTargetBlurBuffer1.texture.generateMipmaps = false;
+	this.renderTargetBlurBuffer2 = new THREE.WebGLRenderTarget( Math.round( resx / 2 ), Math.round( resy / 2 ), pars );
+	this.renderTargetBlurBuffer2.texture.name = "OutlinePass.blur2";
+	this.renderTargetBlurBuffer2.texture.generateMipmaps = false;
+
+	this.edgeDetectionMaterial = this.getEdgeDetectionMaterial();
+	this.renderTargetEdgeBuffer1 = new THREE.WebGLRenderTarget( resx, resy, pars );
+	this.renderTargetEdgeBuffer1.texture.name = "OutlinePass.edge1";
+	this.renderTargetEdgeBuffer1.texture.generateMipmaps = false;
+	this.renderTargetEdgeBuffer2 = new THREE.WebGLRenderTarget( Math.round( resx / 2 ), Math.round( resy / 2 ), pars );
+	this.renderTargetEdgeBuffer2.texture.name = "OutlinePass.edge2";
+	this.renderTargetEdgeBuffer2.texture.generateMipmaps = false;
+
+	var MAX_EDGE_THICKNESS = 4;
+	var MAX_EDGE_GLOW = 4;
+
+	this.separableBlurMaterial1 = this.getSeperableBlurMaterial( MAX_EDGE_THICKNESS );
+	this.separableBlurMaterial1.uniforms[ "texSize" ].value = new THREE.Vector2( resx, resy );
+	this.separableBlurMaterial1.uniforms[ "kernelRadius" ].value = 1;
+	this.separableBlurMaterial2 = this.getSeperableBlurMaterial( MAX_EDGE_GLOW );
+	this.separableBlurMaterial2.uniforms[ "texSize" ].value = new THREE.Vector2( Math.round( resx / 2 ), Math.round( resy / 2 ) );
+	this.separableBlurMaterial2.uniforms[ "kernelRadius" ].value = MAX_EDGE_GLOW;
+
+	// Overlay material
+	this.overlayMaterial = this.getOverlayMaterial();
+
+	// copy material
+	if ( THREE.CopyShader === undefined )
+		console.error( "THREE.OutlinePass relies on THREE.CopyShader" );
+
+	var copyShader = THREE.CopyShader;
+
+	this.copyUniforms = THREE.UniformsUtils.clone( copyShader.uniforms );
+	this.copyUniforms[ "opacity" ].value = 1.0;
+
+	this.materialCopy = new THREE.ShaderMaterial( {
+		uniforms: this.copyUniforms,
+		vertexShader: copyShader.vertexShader,
+		fragmentShader: copyShader.fragmentShader,
+		blending: THREE.NoBlending,
+		depthTest: false,
+		depthWrite: false,
+		transparent: true
+	} );
+
+	this.enabled = true;
+	this.needsSwap = false;
+
+	this.oldClearColor = new THREE.Color();
+	this.oldClearAlpha = 1;
+
+	this.camera = new THREE.OrthographicCamera( - 1, 1, 1, - 1, 0, 1 );
+	this.scene = new THREE.Scene();
+
+	this.quad = new THREE.Mesh( new THREE.PlaneBufferGeometry( 2, 2 ), null );
+	this.quad.frustumCulled = false; // Avoid getting clipped
+	this.scene.add( this.quad );
+
+	this.tempPulseColor1 = new THREE.Color();
+	this.tempPulseColor2 = new THREE.Color();
+	this.textureMatrix = new THREE.Matrix4();
+
+	function replaceDepthToViewZ( string, camera ) {
+
+		var type = camera.isPerspectiveCamera ? 'perspective' : 'orthographic';
+
+		return string.replace( /DEPTH_TO_VIEW_Z/g, type + 'DepthToViewZ' );
 
 	}
 
 };
 
-// browserify support
-if ( typeof module === 'object' ) {
+THREE.OutlinePass.prototype = Object.assign( Object.create( THREE.Pass.prototype ), {
 
-	module.exports = Detector;
+	constructor: THREE.OutlinePass,
 
-}
+	dispose: function () {
+
+		this.renderTargetMaskBuffer.dispose();
+		this.renderTargetDepthBuffer.dispose();
+		this.renderTargetMaskDownSampleBuffer.dispose();
+		this.renderTargetBlurBuffer1.dispose();
+		this.renderTargetBlurBuffer2.dispose();
+		this.renderTargetEdgeBuffer1.dispose();
+		this.renderTargetEdgeBuffer2.dispose();
+
+	},
+
+	setSize: function ( width, height ) {
+
+		this.renderTargetMaskBuffer.setSize( width, height );
+
+		var resx = Math.round( width / this.downSampleRatio );
+		var resy = Math.round( height / this.downSampleRatio );
+		this.renderTargetMaskDownSampleBuffer.setSize( resx, resy );
+		this.renderTargetBlurBuffer1.setSize( resx, resy );
+		this.renderTargetEdgeBuffer1.setSize( resx, resy );
+		this.separableBlurMaterial1.uniforms[ "texSize" ].value = new THREE.Vector2( resx, resy );
+
+		resx = Math.round( resx / 2 );
+		resy = Math.round( resy / 2 );
+
+		this.renderTargetBlurBuffer2.setSize( resx, resy );
+		this.renderTargetEdgeBuffer2.setSize( resx, resy );
+
+		this.separableBlurMaterial2.uniforms[ "texSize" ].value = new THREE.Vector2( resx, resy );
+
+	},
+
+	changeVisibilityOfSelectedObjects: function ( bVisible ) {
+
+		function gatherSelectedMeshesCallBack( object ) {
+
+			if ( object instanceof THREE.Mesh ) object.visible = bVisible;
+
+		}
+
+		for ( var i = 0; i < this.selectedObjects.length; i ++ ) {
+
+			var selectedObject = this.selectedObjects[ i ];
+			selectedObject.traverse( gatherSelectedMeshesCallBack );
+
+		}
+
+	},
+
+	changeVisibilityOfNonSelectedObjects: function ( bVisible ) {
+
+		var selectedMeshes = [];
+
+		function gatherSelectedMeshesCallBack( object ) {
+
+			if ( object instanceof THREE.Mesh ) selectedMeshes.push( object );
+
+		}
+
+		for ( var i = 0; i < this.selectedObjects.length; i ++ ) {
+
+			var selectedObject = this.selectedObjects[ i ];
+			selectedObject.traverse( gatherSelectedMeshesCallBack );
+
+		}
+
+		function VisibilityChangeCallBack( object ) {
+
+			if ( object instanceof THREE.Mesh || object instanceof THREE.Line || object instanceof THREE.Sprite ) {
+
+				var bFound = false;
+
+				for ( var i = 0; i < selectedMeshes.length; i ++ ) {
+
+					var selectedObjectId = selectedMeshes[ i ].id;
+
+					if ( selectedObjectId === object.id ) {
+
+						bFound = true;
+						break;
+
+					}
+
+				}
+
+				if ( ! bFound ) {
+
+					var visibility = object.visible;
+
+					if ( ! bVisible || object.bVisible ) object.visible = bVisible;
+
+					object.bVisible = visibility;
+
+				}
+
+			}
+
+		}
+
+		this.renderScene.traverse( VisibilityChangeCallBack );
+
+	},
+
+	updateTextureMatrix: function () {
+
+		this.textureMatrix.set( 0.5, 0.0, 0.0, 0.5,
+			0.0, 0.5, 0.0, 0.5,
+			0.0, 0.0, 0.5, 0.5,
+			0.0, 0.0, 0.0, 1.0 );
+		this.textureMatrix.multiply( this.renderCamera.projectionMatrix );
+		this.textureMatrix.multiply( this.renderCamera.matrixWorldInverse );
+
+	},
+
+	render: function ( renderer, writeBuffer, readBuffer, delta, maskActive ) {
+
+		if ( this.selectedObjects.length === 0 ) return;
+
+		this.oldClearColor.copy( renderer.getClearColor() );
+		this.oldClearAlpha = renderer.getClearAlpha();
+		var oldAutoClear = renderer.autoClear;
+
+		renderer.autoClear = false;
+
+		if ( maskActive ) renderer.context.disable( renderer.context.STENCIL_TEST );
+
+		renderer.setClearColor( 0xffffff, 1 );
+
+		// Make selected objects invisible
+		this.changeVisibilityOfSelectedObjects( false );
+
+		var currentBackground = this.renderScene.background;
+		this.renderScene.background = null;
+
+		// 1. Draw Non Selected objects in the depth buffer
+		this.renderScene.overrideMaterial = this.depthMaterial;
+		renderer.render( this.renderScene, this.renderCamera, this.renderTargetDepthBuffer, true );
+
+		// Make selected objects visible
+		this.changeVisibilityOfSelectedObjects( true );
+
+		// Update Texture Matrix for Depth compare
+		this.updateTextureMatrix();
+
+		// Make non selected objects invisible, and draw only the selected objects, by comparing the depth buffer of non selected objects
+		this.changeVisibilityOfNonSelectedObjects( false );
+		this.renderScene.overrideMaterial = this.prepareMaskMaterial;
+		this.prepareMaskMaterial.uniforms[ "cameraNearFar" ].value = new THREE.Vector2( this.renderCamera.near, this.renderCamera.far );
+		this.prepareMaskMaterial.uniforms[ "depthTexture" ].value = this.renderTargetDepthBuffer.texture;
+		this.prepareMaskMaterial.uniforms[ "textureMatrix" ].value = this.textureMatrix;
+		renderer.render( this.renderScene, this.renderCamera, this.renderTargetMaskBuffer, true );
+		this.renderScene.overrideMaterial = null;
+		this.changeVisibilityOfNonSelectedObjects( true );
+
+		this.renderScene.background = currentBackground;
+
+		// 2. Downsample to Half resolution
+		this.quad.material = this.materialCopy;
+		this.copyUniforms[ "tDiffuse" ].value = this.renderTargetMaskBuffer.texture;
+		renderer.render( this.scene, this.camera, this.renderTargetMaskDownSampleBuffer, true );
+
+		this.tempPulseColor1.copy( this.visibleEdgeColor );
+		this.tempPulseColor2.copy( this.hiddenEdgeColor );
+
+		if ( this.pulsePeriod > 0 ) {
+
+			var scalar = ( 1 + 0.25 ) / 2 + Math.cos( performance.now() * 0.01 / this.pulsePeriod ) * ( 1.0 - 0.25 ) / 2;
+			this.tempPulseColor1.multiplyScalar( scalar );
+			this.tempPulseColor2.multiplyScalar( scalar );
+
+		}
+
+		// 3. Apply Edge Detection Pass
+		this.quad.material = this.edgeDetectionMaterial;
+		this.edgeDetectionMaterial.uniforms[ "maskTexture" ].value = this.renderTargetMaskDownSampleBuffer.texture;
+		this.edgeDetectionMaterial.uniforms[ "texSize" ].value = new THREE.Vector2( this.renderTargetMaskDownSampleBuffer.width, this.renderTargetMaskDownSampleBuffer.height );
+		this.edgeDetectionMaterial.uniforms[ "visibleEdgeColor" ].value = this.tempPulseColor1;
+		this.edgeDetectionMaterial.uniforms[ "hiddenEdgeColor" ].value = this.tempPulseColor2;
+		renderer.render( this.scene, this.camera, this.renderTargetEdgeBuffer1, true );
+
+		// 4. Apply Blur on Half res
+		this.quad.material = this.separableBlurMaterial1;
+		this.separableBlurMaterial1.uniforms[ "colorTexture" ].value = this.renderTargetEdgeBuffer1.texture;
+		this.separableBlurMaterial1.uniforms[ "direction" ].value = THREE.OutlinePass.BlurDirectionX;
+		this.separableBlurMaterial1.uniforms[ "kernelRadius" ].value = this.edgeThickness;
+		renderer.render( this.scene, this.camera, this.renderTargetBlurBuffer1, true );
+		this.separableBlurMaterial1.uniforms[ "colorTexture" ].value = this.renderTargetBlurBuffer1.texture;
+		this.separableBlurMaterial1.uniforms[ "direction" ].value = THREE.OutlinePass.BlurDirectionY;
+		renderer.render( this.scene, this.camera, this.renderTargetEdgeBuffer1, true );
+
+		// Apply Blur on quarter res
+		this.quad.material = this.separableBlurMaterial2;
+		this.separableBlurMaterial2.uniforms[ "colorTexture" ].value = this.renderTargetEdgeBuffer1.texture;
+		this.separableBlurMaterial2.uniforms[ "direction" ].value = THREE.OutlinePass.BlurDirectionX;
+		renderer.render( this.scene, this.camera, this.renderTargetBlurBuffer2, true );
+		this.separableBlurMaterial2.uniforms[ "colorTexture" ].value = this.renderTargetBlurBuffer2.texture;
+		this.separableBlurMaterial2.uniforms[ "direction" ].value = THREE.OutlinePass.BlurDirectionY;
+		renderer.render( this.scene, this.camera, this.renderTargetEdgeBuffer2, true );
+
+		// Blend it additively over the input texture
+		this.quad.material = this.overlayMaterial;
+		this.overlayMaterial.uniforms[ "maskTexture" ].value = this.renderTargetMaskBuffer.texture;
+		this.overlayMaterial.uniforms[ "edgeTexture1" ].value = this.renderTargetEdgeBuffer1.texture;
+		this.overlayMaterial.uniforms[ "edgeTexture2" ].value = this.renderTargetEdgeBuffer2.texture;
+		this.overlayMaterial.uniforms[ "patternTexture" ].value = this.patternTexture;
+		this.overlayMaterial.uniforms[ "edgeStrength" ].value = this.edgeStrength;
+		this.overlayMaterial.uniforms[ "edgeGlow" ].value = this.edgeGlow;
+		this.overlayMaterial.uniforms[ "usePatternTexture" ].value = this.usePatternTexture;
+
+
+		if ( maskActive ) renderer.context.enable( renderer.context.STENCIL_TEST );
+
+		renderer.render( this.scene, this.camera, readBuffer, false );
+
+		renderer.setClearColor( this.oldClearColor, this.oldClearAlpha );
+		renderer.autoClear = oldAutoClear;
+
+	},
+
+	getPrepareMaskMaterial: function () {
+
+		return new THREE.ShaderMaterial( {
+
+			uniforms: {
+				"depthTexture": { value: null },
+				"cameraNearFar": { value: new THREE.Vector2( 0.5, 0.5 ) },
+				"textureMatrix": { value: new THREE.Matrix4() }
+			},
+
+			vertexShader: [
+				'varying vec4 projTexCoord;',
+				'varying vec4 vPosition;',
+				'uniform mat4 textureMatrix;',
+
+				'void main() {',
+
+				'	vPosition = modelViewMatrix * vec4( position, 1.0 );',
+				'	vec4 worldPosition = modelMatrix * vec4( position, 1.0 );',
+				'	projTexCoord = textureMatrix * worldPosition;',
+				'	gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );',
+
+				'}'
+			].join( '\n' ),
+
+			fragmentShader: [
+				'#include <packing>',
+				'varying vec4 vPosition;',
+				'varying vec4 projTexCoord;',
+				'uniform sampler2D depthTexture;',
+				'uniform vec2 cameraNearFar;',
+
+				'void main() {',
+
+				'	float depth = unpackRGBAToDepth(texture2DProj( depthTexture, projTexCoord ));',
+				'	float viewZ = - DEPTH_TO_VIEW_Z( depth, cameraNearFar.x, cameraNearFar.y );',
+				'	float depthTest = (-vPosition.z > viewZ) ? 1.0 : 0.0;',
+				'	gl_FragColor = vec4(0.0, depthTest, 1.0, 1.0);',
+
+				'}'
+			].join( '\n' )
+
+		} );
+
+	},
+
+	getEdgeDetectionMaterial: function () {
+
+		return new THREE.ShaderMaterial( {
+
+			uniforms: {
+				"maskTexture": { value: null },
+				"texSize": { value: new THREE.Vector2( 0.5, 0.5 ) },
+				"visibleEdgeColor": { value: new THREE.Vector3( 1.0, 1.0, 1.0 ) },
+				"hiddenEdgeColor": { value: new THREE.Vector3( 1.0, 1.0, 1.0 ) },
+			},
+
+			vertexShader:
+				"varying vec2 vUv;\n\
+				void main() {\n\
+					vUv = uv;\n\
+					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );\n\
+				}",
+
+			fragmentShader:
+				"varying vec2 vUv;\
+				uniform sampler2D maskTexture;\
+				uniform vec2 texSize;\
+				uniform vec3 visibleEdgeColor;\
+				uniform vec3 hiddenEdgeColor;\
+				\
+				void main() {\n\
+					vec2 invSize = 1.0 / texSize;\
+					vec4 uvOffset = vec4(1.0, 0.0, 0.0, 1.0) * vec4(invSize, invSize);\
+					vec4 c1 = texture2D( maskTexture, vUv + uvOffset.xy);\
+					vec4 c2 = texture2D( maskTexture, vUv - uvOffset.xy);\
+					vec4 c3 = texture2D( maskTexture, vUv + uvOffset.yw);\
+					vec4 c4 = texture2D( maskTexture, vUv - uvOffset.yw);\
+					float diff1 = (c1.r - c2.r)*0.5;\
+					float diff2 = (c3.r - c4.r)*0.5;\
+					float d = length( vec2(diff1, diff2) );\
+					float a1 = min(c1.g, c2.g);\
+					float a2 = min(c3.g, c4.g);\
+					float visibilityFactor = min(a1, a2);\
+					vec3 edgeColor = 1.0 - visibilityFactor > 0.001 ? visibleEdgeColor : hiddenEdgeColor;\
+					gl_FragColor = vec4(edgeColor, 1.0) * vec4(d);\
+				}"
+		} );
+
+	},
+
+	getSeperableBlurMaterial: function ( maxRadius ) {
+
+		return new THREE.ShaderMaterial( {
+
+			defines: {
+				"MAX_RADIUS": maxRadius,
+			},
+
+			uniforms: {
+				"colorTexture": { value: null },
+				"texSize": { value: new THREE.Vector2( 0.5, 0.5 ) },
+				"direction": { value: new THREE.Vector2( 0.5, 0.5 ) },
+				"kernelRadius": { value: 1.0 }
+			},
+
+			vertexShader:
+				"varying vec2 vUv;\n\
+				void main() {\n\
+					vUv = uv;\n\
+					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );\n\
+				}",
+
+			fragmentShader:
+				"#include <common>\
+				varying vec2 vUv;\
+				uniform sampler2D colorTexture;\
+				uniform vec2 texSize;\
+				uniform vec2 direction;\
+				uniform float kernelRadius;\
+				\
+				float gaussianPdf(in float x, in float sigma) {\
+					return 0.39894 * exp( -0.5 * x * x/( sigma * sigma))/sigma;\
+				}\
+				void main() {\
+					vec2 invSize = 1.0 / texSize;\
+					float weightSum = gaussianPdf(0.0, kernelRadius);\
+					vec3 diffuseSum = texture2D( colorTexture, vUv).rgb * weightSum;\
+					vec2 delta = direction * invSize * kernelRadius/float(MAX_RADIUS);\
+					vec2 uvOffset = delta;\
+					for( int i = 1; i <= MAX_RADIUS; i ++ ) {\
+						float w = gaussianPdf(uvOffset.x, kernelRadius);\
+						vec3 sample1 = texture2D( colorTexture, vUv + uvOffset).rgb;\
+						vec3 sample2 = texture2D( colorTexture, vUv - uvOffset).rgb;\
+						diffuseSum += ((sample1 + sample2) * w);\
+						weightSum += (2.0 * w);\
+						uvOffset += delta;\
+					}\
+					gl_FragColor = vec4(diffuseSum/weightSum, 1.0);\
+				}"
+		} );
+
+	},
+
+	getOverlayMaterial: function () {
+
+		return new THREE.ShaderMaterial( {
+
+			uniforms: {
+				"maskTexture": { value: null },
+				"edgeTexture1": { value: null },
+				"edgeTexture2": { value: null },
+				"patternTexture": { value: null },
+				"edgeStrength": { value: 1.0 },
+				"edgeGlow": { value: 1.0 },
+				"usePatternTexture": { value: 0.0 }
+			},
+
+			vertexShader:
+				"varying vec2 vUv;\n\
+				void main() {\n\
+					vUv = uv;\n\
+					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );\n\
+				}",
+
+			fragmentShader:
+				"varying vec2 vUv;\
+				uniform sampler2D maskTexture;\
+				uniform sampler2D edgeTexture1;\
+				uniform sampler2D edgeTexture2;\
+				uniform sampler2D patternTexture;\
+				uniform float edgeStrength;\
+				uniform float edgeGlow;\
+				uniform bool usePatternTexture;\
+				\
+				void main() {\
+					vec4 edgeValue1 = texture2D(edgeTexture1, vUv);\
+					vec4 edgeValue2 = texture2D(edgeTexture2, vUv);\
+					vec4 maskColor = texture2D(maskTexture, vUv);\
+					vec4 patternColor = texture2D(patternTexture, 6.0 * vUv);\
+					float visibilityFactor = 1.0 - maskColor.g > 0.0 ? 1.0 : 0.5;\
+					vec4 edgeValue = edgeValue1 + edgeValue2 * edgeGlow;\
+					vec4 finalColor = edgeStrength * maskColor.r * edgeValue;\
+					if(usePatternTexture)\
+						finalColor += + visibilityFactor * (1.0 - maskColor.r) * (1.0 - patternColor.r);\
+					gl_FragColor = finalColor;\
+				}",
+			blending: THREE.AdditiveBlending,
+			depthTest: false,
+			depthWrite: false,
+			transparent: true
+		} );
+
+	}
+
+} );
+
+THREE.OutlinePass.BlurDirectionX = new THREE.Vector2( 1.0, 0.0 );
+THREE.OutlinePass.BlurDirectionY = new THREE.Vector2( 0.0, 1.0 );
+
+/**
+ * @author Nikos M. / https://github.com/foo123/
+ */
+
+// https://github.com/mrdoob/three.js/issues/5552
+// http://en.wikipedia.org/wiki/RGBE_image_format
+
+THREE.HDRLoader = THREE.RGBELoader = function ( manager ) {
+
+	this.manager = ( manager !== undefined ) ? manager : THREE.DefaultLoadingManager;
+
+};
+
+// extend THREE.DataTextureLoader
+THREE.RGBELoader.prototype = Object.create( THREE.DataTextureLoader.prototype );
+
+// adapted from http://www.graphics.cornell.edu/~bjw/rgbe.html
+THREE.RGBELoader.prototype._parser = function ( buffer ) {
+
+	var
+		/* return codes for rgbe routines */
+		RGBE_RETURN_SUCCESS = 0,
+		RGBE_RETURN_FAILURE = - 1,
+
+		/* default error routine.  change this to change error handling */
+		rgbe_read_error = 1,
+		rgbe_write_error = 2,
+		rgbe_format_error = 3,
+		rgbe_memory_error = 4,
+		rgbe_error = function ( rgbe_error_code, msg ) {
+
+			switch ( rgbe_error_code ) {
+
+				case rgbe_read_error: console.error( "THREE.RGBELoader Read Error: " + ( msg || '' ) );
+					break;
+				case rgbe_write_error: console.error( "THREE.RGBELoader Write Error: " + ( msg || '' ) );
+					break;
+				case rgbe_format_error: console.error( "THREE.RGBELoader Bad File Format: " + ( msg || '' ) );
+					break;
+				default:
+				case rgbe_memory_error: console.error( "THREE.RGBELoader: Error: " + ( msg || '' ) );
+
+			}
+			return RGBE_RETURN_FAILURE;
+
+		},
+
+		/* offsets to red, green, and blue components in a data (float) pixel */
+		RGBE_DATA_RED = 0,
+		RGBE_DATA_GREEN = 1,
+		RGBE_DATA_BLUE = 2,
+
+		/* number of floats per pixel, use 4 since stored in rgba image format */
+		RGBE_DATA_SIZE = 4,
+
+		/* flags indicating which fields in an rgbe_header_info are valid */
+		RGBE_VALID_PROGRAMTYPE = 1,
+		RGBE_VALID_FORMAT = 2,
+		RGBE_VALID_DIMENSIONS = 4,
+
+		NEWLINE = "\n",
+
+		fgets = function ( buffer, lineLimit, consume ) {
+
+			lineLimit = ! lineLimit ? 1024 : lineLimit;
+			var p = buffer.pos,
+				i = - 1, len = 0, s = '', chunkSize = 128,
+				chunk = String.fromCharCode.apply( null, new Uint16Array( buffer.subarray( p, p + chunkSize ) ) )
+			;
+			while ( ( 0 > ( i = chunk.indexOf( NEWLINE ) ) ) && ( len < lineLimit ) && ( p < buffer.byteLength ) ) {
+
+				s += chunk; len += chunk.length;
+				p += chunkSize;
+				chunk += String.fromCharCode.apply( null, new Uint16Array( buffer.subarray( p, p + chunkSize ) ) );
+
+			}
+
+			if ( - 1 < i ) {
+
+				/*for (i=l-1; i>=0; i--) {
+					byteCode = m.charCodeAt(i);
+					if (byteCode > 0x7f && byteCode <= 0x7ff) byteLen++;
+					else if (byteCode > 0x7ff && byteCode <= 0xffff) byteLen += 2;
+					if (byteCode >= 0xDC00 && byteCode <= 0xDFFF) i--; //trail surrogate
+				}*/
+				if ( false !== consume ) buffer.pos += len + i + 1;
+				return s + chunk.slice( 0, i );
+
+			}
+			return false;
+
+		},
+
+		/* minimal header reading.  modify if you want to parse more information */
+		RGBE_ReadHeader = function ( buffer ) {
+
+			var line, match,
+
+				// regexes to parse header info fields
+				magic_token_re = /^#\?(\S+)$/,
+				gamma_re = /^\s*GAMMA\s*=\s*(\d+(\.\d+)?)\s*$/,
+				exposure_re = /^\s*EXPOSURE\s*=\s*(\d+(\.\d+)?)\s*$/,
+				format_re = /^\s*FORMAT=(\S+)\s*$/,
+				dimensions_re = /^\s*\-Y\s+(\d+)\s+\+X\s+(\d+)\s*$/,
+
+				// RGBE format header struct
+				header = {
+
+					valid: 0, /* indicate which fields are valid */
+
+					string: '', /* the actual header string */
+
+					comments: '', /* comments found in header */
+
+					programtype: 'RGBE', /* listed at beginning of file to identify it after "#?". defaults to "RGBE" */
+
+					format: '', /* RGBE format, default 32-bit_rle_rgbe */
+
+					gamma: 1.0, /* image has already been gamma corrected with given gamma. defaults to 1.0 (no correction) */
+
+					exposure: 1.0, /* a value of 1.0 in an image corresponds to <exposure> watts/steradian/m^2. defaults to 1.0 */
+
+					width: 0, height: 0 /* image dimensions, width/height */
+
+				};
+
+			if ( buffer.pos >= buffer.byteLength || ! ( line = fgets( buffer ) ) ) {
+
+				return rgbe_error( rgbe_read_error, "no header found" );
+
+			}
+			/* if you want to require the magic token then uncomment the next line */
+			if ( ! ( match = line.match( magic_token_re ) ) ) {
+
+				return rgbe_error( rgbe_format_error, "bad initial token" );
+
+			}
+			header.valid |= RGBE_VALID_PROGRAMTYPE;
+			header.programtype = match[ 1 ];
+			header.string += line + "\n";
+
+			while ( true ) {
+
+				line = fgets( buffer );
+				if ( false === line ) break;
+				header.string += line + "\n";
+
+				if ( '#' === line.charAt( 0 ) ) {
+
+					header.comments += line + "\n";
+					continue; // comment line
+
+				}
+
+				if ( match = line.match( gamma_re ) ) {
+
+					header.gamma = parseFloat( match[ 1 ], 10 );
+
+				}
+				if ( match = line.match( exposure_re ) ) {
+
+					header.exposure = parseFloat( match[ 1 ], 10 );
+
+				}
+				if ( match = line.match( format_re ) ) {
+
+					header.valid |= RGBE_VALID_FORMAT;
+					header.format = match[ 1 ];//'32-bit_rle_rgbe';
+
+				}
+				if ( match = line.match( dimensions_re ) ) {
+
+					header.valid |= RGBE_VALID_DIMENSIONS;
+					header.height = parseInt( match[ 1 ], 10 );
+					header.width = parseInt( match[ 2 ], 10 );
+
+				}
+
+				if ( ( header.valid & RGBE_VALID_FORMAT ) && ( header.valid & RGBE_VALID_DIMENSIONS ) ) break;
+
+			}
+
+			if ( ! ( header.valid & RGBE_VALID_FORMAT ) ) {
+
+				return rgbe_error( rgbe_format_error, "missing format specifier" );
+
+			}
+			if ( ! ( header.valid & RGBE_VALID_DIMENSIONS ) ) {
+
+				return rgbe_error( rgbe_format_error, "missing image size specifier" );
+
+			}
+
+			return header;
+
+		},
+
+		RGBE_ReadPixels_RLE = function ( buffer, w, h ) {
+
+			var data_rgba, offset, pos, count, byteValue,
+				scanline_buffer, ptr, ptr_end, i, l, off, isEncodedRun,
+				scanline_width = w, num_scanlines = h, rgbeStart
+			;
+
+			if (
+				// run length encoding is not allowed so read flat
+				( ( scanline_width < 8 ) || ( scanline_width > 0x7fff ) ) ||
+				// this file is not run length encoded
+				( ( 2 !== buffer[ 0 ] ) || ( 2 !== buffer[ 1 ] ) || ( buffer[ 2 ] & 0x80 ) )
+			) {
+
+				// return the flat buffer
+				return new Uint8Array( buffer );
+
+			}
+
+			if ( scanline_width !== ( ( buffer[ 2 ] << 8 ) | buffer[ 3 ] ) ) {
+
+				return rgbe_error( rgbe_format_error, "wrong scanline width" );
+
+			}
+
+			data_rgba = new Uint8Array( 4 * w * h );
+
+			if ( ! data_rgba || ! data_rgba.length ) {
+
+				return rgbe_error( rgbe_memory_error, "unable to allocate buffer space" );
+
+			}
+
+			offset = 0; pos = 0; ptr_end = 4 * scanline_width;
+			rgbeStart = new Uint8Array( 4 );
+			scanline_buffer = new Uint8Array( ptr_end );
+
+			// read in each successive scanline
+			while ( ( num_scanlines > 0 ) && ( pos < buffer.byteLength ) ) {
+
+				if ( pos + 4 > buffer.byteLength ) {
+
+					return rgbe_error( rgbe_read_error );
+
+				}
+
+				rgbeStart[ 0 ] = buffer[ pos ++ ];
+				rgbeStart[ 1 ] = buffer[ pos ++ ];
+				rgbeStart[ 2 ] = buffer[ pos ++ ];
+				rgbeStart[ 3 ] = buffer[ pos ++ ];
+
+				if ( ( 2 != rgbeStart[ 0 ] ) || ( 2 != rgbeStart[ 1 ] ) || ( ( ( rgbeStart[ 2 ] << 8 ) | rgbeStart[ 3 ] ) != scanline_width ) ) {
+
+					return rgbe_error( rgbe_format_error, "bad rgbe scanline format" );
+
+				}
+
+				// read each of the four channels for the scanline into the buffer
+				// first red, then green, then blue, then exponent
+				ptr = 0;
+				while ( ( ptr < ptr_end ) && ( pos < buffer.byteLength ) ) {
+
+					count = buffer[ pos ++ ];
+					isEncodedRun = count > 128;
+					if ( isEncodedRun ) count -= 128;
+
+					if ( ( 0 === count ) || ( ptr + count > ptr_end ) ) {
+
+						return rgbe_error( rgbe_format_error, "bad scanline data" );
+
+					}
+
+					if ( isEncodedRun ) {
+
+						// a (encoded) run of the same value
+						byteValue = buffer[ pos ++ ];
+						for ( i = 0; i < count; i ++ ) {
+
+							scanline_buffer[ ptr ++ ] = byteValue;
+
+						}
+						//ptr += count;
+
+					} else {
+
+						// a literal-run
+						scanline_buffer.set( buffer.subarray( pos, pos + count ), ptr );
+						ptr += count; pos += count;
+
+					}
+
+				}
+
+
+				// now convert data from buffer into rgba
+				// first red, then green, then blue, then exponent (alpha)
+				l = scanline_width; //scanline_buffer.byteLength;
+				for ( i = 0; i < l; i ++ ) {
+
+					off = 0;
+					data_rgba[ offset ] = scanline_buffer[ i + off ];
+					off += scanline_width; //1;
+					data_rgba[ offset + 1 ] = scanline_buffer[ i + off ];
+					off += scanline_width; //1;
+					data_rgba[ offset + 2 ] = scanline_buffer[ i + off ];
+					off += scanline_width; //1;
+					data_rgba[ offset + 3 ] = scanline_buffer[ i + off ];
+					offset += 4;
+
+				}
+
+				num_scanlines --;
+
+			}
+
+			return data_rgba;
+
+		}
+	;
+
+	var byteArray = new Uint8Array( buffer ),
+		byteLength = byteArray.byteLength;
+	byteArray.pos = 0;
+	var rgbe_header_info = RGBE_ReadHeader( byteArray );
+
+	if ( RGBE_RETURN_FAILURE !== rgbe_header_info ) {
+
+		var w = rgbe_header_info.width,
+			h = rgbe_header_info.height,
+			image_rgba_data = RGBE_ReadPixels_RLE( byteArray.subarray( byteArray.pos ), w, h )
+		;
+		if ( RGBE_RETURN_FAILURE !== image_rgba_data ) {
+
+			return {
+				width: w, height: h,
+				data: image_rgba_data,
+				header: rgbe_header_info.string,
+				gamma: rgbe_header_info.gamma,
+				exposure: rgbe_header_info.exposure,
+				format: THREE.RGBEFormat, // handled as THREE.RGBAFormat in shaders
+				type: THREE.UnsignedByteType
+			};
+
+		}
+
+	}
+	return null;
+
+};
+
+/**
+* @author Prashant Sharma / spidersharma03
+* @author Ben Houston / http://clara.io / bhouston
+*/
+
+THREE.HDRCubeTextureLoader = function ( manager ) {
+
+	this.manager = ( manager !== undefined ) ? manager : THREE.DefaultLoadingManager;
+	// override in sub classes
+	this.hdrLoader = new THREE.RGBELoader();
+
+};
+
+THREE.HDRCubeTextureLoader.prototype.load = function ( type, urls, onLoad, onProgress, onError ) {
+
+	var RGBEByteToRGBFloat = function ( sourceArray, sourceOffset, destArray, destOffset ) {
+
+		var e = sourceArray[ sourceOffset + 3 ];
+		var scale = Math.pow( 2.0, e - 128.0 ) / 255.0;
+
+		destArray[ destOffset + 0 ] = sourceArray[ sourceOffset + 0 ] * scale;
+		destArray[ destOffset + 1 ] = sourceArray[ sourceOffset + 1 ] * scale;
+		destArray[ destOffset + 2 ] = sourceArray[ sourceOffset + 2 ] * scale;
+
+	};
+
+	var RGBEByteToRGBHalf = ( function () {
+
+		// Source: http://gamedev.stackexchange.com/questions/17326/conversion-of-a-number-from-single-precision-floating-point-representation-to-a/17410#17410
+
+		var floatView = new Float32Array( 1 );
+		var int32View = new Int32Array( floatView.buffer );
+
+		/* This method is faster than the OpenEXR implementation (very often
+		 * used, eg. in Ogre), with the additional benefit of rounding, inspired
+		 * by James Tursa?s half-precision code. */
+		function toHalf( val ) {
+
+			floatView[ 0 ] = val;
+			var x = int32View[ 0 ];
+
+			var bits = ( x >> 16 ) & 0x8000; /* Get the sign */
+			var m = ( x >> 12 ) & 0x07ff; /* Keep one extra bit for rounding */
+			var e = ( x >> 23 ) & 0xff; /* Using int is faster here */
+
+			/* If zero, or denormal, or exponent underflows too much for a denormal
+			 * half, return signed zero. */
+			if ( e < 103 ) return bits;
+
+			/* If NaN, return NaN. If Inf or exponent overflow, return Inf. */
+			if ( e > 142 ) {
+
+				bits |= 0x7c00;
+				/* If exponent was 0xff and one mantissa bit was set, it means NaN,
+						 * not Inf, so make sure we set one mantissa bit too. */
+				bits |= ( ( e == 255 ) ? 0 : 1 ) && ( x & 0x007fffff );
+				return bits;
+
+			}
+
+			/* If exponent underflows but not too much, return a denormal */
+			if ( e < 113 ) {
+
+				m |= 0x0800;
+				/* Extra rounding may overflow and set mantissa to 0 and exponent
+				 * to 1, which is OK. */
+				bits |= ( m >> ( 114 - e ) ) + ( ( m >> ( 113 - e ) ) & 1 );
+				return bits;
+
+			}
+
+			bits |= ( ( e - 112 ) << 10 ) | ( m >> 1 );
+			/* Extra rounding. An overflow will set mantissa to 0 and increment
+			 * the exponent, which is OK. */
+			bits += m & 1;
+			return bits;
+
+		}
+
+		return function ( sourceArray, sourceOffset, destArray, destOffset ) {
+
+			var e = sourceArray[ sourceOffset + 3 ];
+			var scale = Math.pow( 2.0, e - 128.0 ) / 255.0;
+
+			destArray[ destOffset + 0 ] = toHalf( sourceArray[ sourceOffset + 0 ] * scale );
+			destArray[ destOffset + 1 ] = toHalf( sourceArray[ sourceOffset + 1 ] * scale );
+			destArray[ destOffset + 2 ] = toHalf( sourceArray[ sourceOffset + 2 ] * scale );
+
+		};
+
+	} )();
+
+	//
+
+	var texture = new THREE.CubeTexture();
+
+	texture.type = type;
+	texture.encoding = ( type === THREE.UnsignedByteType ) ? THREE.RGBEEncoding : THREE.LinearEncoding;
+	texture.format = ( type === THREE.UnsignedByteType ) ? THREE.RGBAFormat : THREE.RGBFormat;
+	texture.minFilter = ( texture.encoding === THREE.RGBEEncoding ) ? THREE.NearestFilter : THREE.LinearFilter;
+	texture.magFilter = ( texture.encoding === THREE.RGBEEncoding ) ? THREE.NearestFilter : THREE.LinearFilter;
+	texture.generateMipmaps = ( texture.encoding !== THREE.RGBEEncoding );
+	texture.anisotropy = 0;
+
+	var scope = this.hdrLoader;
+
+	var loaded = 0;
+
+	function loadHDRData( i, onLoad, onProgress, onError ) {
+
+		var loader = new THREE.FileLoader( this.manager );
+		loader.setResponseType( 'arraybuffer' );
+		loader.load( urls[ i ], function ( buffer ) {
+
+			loaded ++;
+
+			var texData = scope._parser( buffer );
+
+			if ( ! texData ) return;
+
+			if ( type === THREE.FloatType ) {
+
+				var numElements = ( texData.data.length / 4 ) * 3;
+				var floatdata = new Float32Array( numElements );
+
+				for ( var j = 0; j < numElements; j ++ ) {
+
+					RGBEByteToRGBFloat( texData.data, j * 4, floatdata, j * 3 );
+
+				}
+
+				texData.data = floatdata;
+
+			} else if ( type === THREE.HalfFloatType ) {
+
+				var numElements = ( texData.data.length / 4 ) * 3;
+				var halfdata = new Uint16Array( numElements );
+
+				for ( var j = 0; j < numElements; j ++ ) {
+
+					RGBEByteToRGBHalf( texData.data, j * 4, halfdata, j * 3 );
+
+				}
+
+				texData.data = halfdata;
+
+			}
+
+			if ( undefined !== texData.image ) {
+
+				texture[ i ].images = texData.image;
+
+			} else if ( undefined !== texData.data ) {
+
+				var dataTexture = new THREE.DataTexture( texData.data, texData.width, texData.height );
+				dataTexture.format = texture.format;
+				dataTexture.type = texture.type;
+				dataTexture.encoding = texture.encoding;
+				dataTexture.minFilter = texture.minFilter;
+				dataTexture.magFilter = texture.magFilter;
+				dataTexture.generateMipmaps = texture.generateMipmaps;
+
+				texture.images[ i ] = dataTexture;
+
+			}
+
+			if ( loaded === 6 ) {
+
+				texture.needsUpdate = true;
+				if ( onLoad ) onLoad( texture );
+
+			}
+
+		}, onProgress, onError );
+
+	}
+
+	for ( var i = 0; i < urls.length; i ++ ) {
+
+		loadHDRData( i, onLoad, onProgress, onError );
+
+	}
+
+	return texture;
+
+};
+
+/**
+ * @author Prashant Sharma / spidersharma03
+ * @author Ben Houston / bhouston, https://clara.io
+ *
+ * To avoid cube map seams, I create an extra pixel around each face. This way when the cube map is
+ * sampled by an application later(with a little care by sampling the centre of the texel), the extra 1 border
+ *	of pixels makes sure that there is no seams artifacts present. This works perfectly for cubeUV format as
+ *	well where the 6 faces can be arranged in any manner whatsoever.
+ * Code in the beginning of fragment shader's main function does this job for a given resolution.
+ *	Run Scene_PMREM_Test.html in the examples directory to see the sampling from the cube lods generated
+ *	by this class.
+ */
+
+THREE.PMREMGenerator = function( sourceTexture, samplesPerLevel, resolution ) {
+
+	this.sourceTexture = sourceTexture;
+	this.resolution = ( resolution !== undefined ) ? resolution : 256; // NODE: 256 is currently hard coded in the glsl code for performance reasons
+	this.samplesPerLevel = ( samplesPerLevel !== undefined ) ? samplesPerLevel : 16;
+
+	var monotonicEncoding = ( sourceTexture.encoding === THREE.LinearEncoding ) ||
+		( sourceTexture.encoding === THREE.GammaEncoding ) || ( sourceTexture.encoding === THREE.sRGBEncoding );
+
+	this.sourceTexture.minFilter = ( monotonicEncoding ) ? THREE.LinearFilter : THREE.NearestFilter;
+	this.sourceTexture.magFilter = ( monotonicEncoding ) ? THREE.LinearFilter : THREE.NearestFilter;
+	this.sourceTexture.generateMipmaps = this.sourceTexture.generateMipmaps && monotonicEncoding;
+
+	this.cubeLods = [];
+
+	var size = this.resolution;
+	var params = {
+		format: this.sourceTexture.format,
+		magFilter: this.sourceTexture.magFilter,
+		minFilter: this.sourceTexture.minFilter,
+		type: this.sourceTexture.type,
+		generateMipmaps: this.sourceTexture.generateMipmaps,
+		anisotropy: this.sourceTexture.anisotropy,
+		encoding: this.sourceTexture.encoding
+	 };
+
+	// how many LODs fit in the given CubeUV Texture.
+	this.numLods = Math.log( size ) / Math.log( 2 ) - 2;  // IE11 doesn't support Math.log2
+
+	for ( var i = 0; i < this.numLods; i ++ ) {
+
+		var renderTarget = new THREE.WebGLRenderTargetCube( size, size, params );
+		renderTarget.texture.name = "PMREMGenerator.cube" + i;
+		this.cubeLods.push( renderTarget );
+		size = Math.max( 16, size / 2 );
+
+	}
+
+	this.camera = new THREE.OrthographicCamera( - 1, 1, 1, - 1, 0.0, 1000 );
+
+	this.shader = this.getShader();
+	this.shader.defines['SAMPLES_PER_LEVEL'] = this.samplesPerLevel;
+	this.planeMesh = new THREE.Mesh( new THREE.PlaneGeometry( 2, 2, 0 ), this.shader );
+	this.planeMesh.material.side = THREE.DoubleSide;
+	this.scene = new THREE.Scene();
+	this.scene.add( this.planeMesh );
+	this.scene.add( this.camera );
+
+	this.shader.uniforms[ 'envMap' ].value = this.sourceTexture;
+	this.shader.envMap = this.sourceTexture;
+
+};
+
+THREE.PMREMGenerator.prototype = {
+
+	constructor : THREE.PMREMGenerator,
+
+	/*
+	 * Prashant Sharma / spidersharma03: More thought and work is needed here.
+	 * Right now it's a kind of a hack to use the previously convolved map to convolve the current one.
+	 * I tried to use the original map to convolve all the lods, but for many textures(specially the high frequency)
+	 * even a high number of samples(1024) dosen't lead to satisfactory results.
+	 * By using the previous convolved maps, a lower number of samples are generally sufficient(right now 32, which
+	 * gives okay results unless we see the reflection very carefully, or zoom in too much), however the math
+	 * goes wrong as the distribution function tries to sample a larger area than what it should be. So I simply scaled
+	 * the roughness by 0.9(totally empirical) to try to visually match the original result.
+	 * The condition "if(i <5)" is also an attemt to make the result match the original result.
+	 * This method requires the most amount of thinking I guess. Here is a paper which we could try to implement in future::
+	 * http://http.developer.nvidia.com/GPUGems3/gpugems3_ch20.html
+	 */
+	update: function( renderer ) {
+
+		this.shader.uniforms[ 'envMap' ].value = this.sourceTexture;
+		this.shader.envMap = this.sourceTexture;
+
+		var gammaInput = renderer.gammaInput;
+		var gammaOutput = renderer.gammaOutput;
+		var toneMapping = renderer.toneMapping;
+		var toneMappingExposure = renderer.toneMappingExposure;
+		var currentRenderTarget = renderer.getRenderTarget();
+
+		renderer.toneMapping = THREE.LinearToneMapping;
+		renderer.toneMappingExposure = 1.0;
+		renderer.gammaInput = false;
+		renderer.gammaOutput = false;
+
+		for ( var i = 0; i < this.numLods; i ++ ) {
+
+			var r = i / ( this.numLods - 1 );
+			this.shader.uniforms[ 'roughness' ].value = r * 0.9; // see comment above, pragmatic choice
+			this.shader.uniforms[ 'queryScale' ].value.x = ( i == 0 ) ? -1 : 1;
+			var size = this.cubeLods[ i ].width;
+			this.shader.uniforms[ 'mapSize' ].value = size;
+			this.renderToCubeMapTarget( renderer, this.cubeLods[ i ] );
+
+			if ( i < 5 ) this.shader.uniforms[ 'envMap' ].value = this.cubeLods[ i ].texture;
+
+		}
+
+		renderer.setRenderTarget( currentRenderTarget );
+		renderer.toneMapping = toneMapping;
+		renderer.toneMappingExposure = toneMappingExposure;
+		renderer.gammaInput = gammaInput;
+		renderer.gammaOutput = gammaOutput;
+
+	},
+
+	renderToCubeMapTarget: function( renderer, renderTarget ) {
+
+		for ( var i = 0; i < 6; i ++ ) {
+
+			this.renderToCubeMapTargetFace( renderer, renderTarget, i )
+
+		}
+
+	},
+
+	renderToCubeMapTargetFace: function( renderer, renderTarget, faceIndex ) {
+
+		renderTarget.activeCubeFace = faceIndex;
+		this.shader.uniforms[ 'faceIndex' ].value = faceIndex;
+		renderer.render( this.scene, this.camera, renderTarget, true );
+
+	},
+
+	getShader: function() {
+
+		return new THREE.ShaderMaterial( {
+
+			defines: {
+				"SAMPLES_PER_LEVEL": 20,
+			},
+
+			uniforms: {
+				"faceIndex": { value: 0 },
+				"roughness": { value: 0.5 },
+				"mapSize": { value: 0.5 },
+				"envMap": { value: null },
+				"queryScale": { value: new THREE.Vector3( 1, 1, 1 ) },
+				"testColor": { value: new THREE.Vector3( 1, 1, 1 ) },
+			},
+
+			vertexShader:
+				"varying vec2 vUv;\n\
+				void main() {\n\
+					vUv = uv;\n\
+					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );\n\
+				}",
+
+			fragmentShader:
+				"#include <common>\n\
+				varying vec2 vUv;\n\
+				uniform int faceIndex;\n\
+				uniform float roughness;\n\
+				uniform samplerCube envMap;\n\
+				uniform float mapSize;\n\
+				uniform vec3 testColor;\n\
+				uniform vec3 queryScale;\n\
+				\n\
+				float GGXRoughnessToBlinnExponent( const in float ggxRoughness ) {\n\
+					float a = ggxRoughness + 0.0001;\n\
+					a *= a;\n\
+					return ( 2.0 / a - 2.0 );\n\
+				}\n\
+				vec3 ImportanceSamplePhong(vec2 uv, mat3 vecSpace, float specPow) {\n\
+					float phi = uv.y * 2.0 * PI;\n\
+					float cosTheta = pow(1.0 - uv.x, 1.0 / (specPow + 1.0));\n\
+					float sinTheta = sqrt(1.0 - cosTheta * cosTheta);\n\
+					vec3 sampleDir = vec3(cos(phi) * sinTheta, sin(phi) * sinTheta, cosTheta);\n\
+					return vecSpace * sampleDir;\n\
+				}\n\
+				vec3 ImportanceSampleGGX( vec2 uv, mat3 vecSpace, float Roughness )\n\
+				{\n\
+					float a = Roughness * Roughness;\n\
+					float Phi = 2.0 * PI * uv.x;\n\
+					float CosTheta = sqrt( (1.0 - uv.y) / ( 1.0 + (a*a - 1.0) * uv.y ) );\n\
+					float SinTheta = sqrt( 1.0 - CosTheta * CosTheta );\n\
+					return vecSpace * vec3(SinTheta * cos( Phi ), SinTheta * sin( Phi ), CosTheta);\n\
+				}\n\
+				mat3 matrixFromVector(vec3 n) {\n\
+					float a = 1.0 / (1.0 + n.z);\n\
+					float b = -n.x * n.y * a;\n\
+					vec3 b1 = vec3(1.0 - n.x * n.x * a, b, -n.x);\n\
+					vec3 b2 = vec3(b, 1.0 - n.y * n.y * a, -n.y);\n\
+					return mat3(b1, b2, n);\n\
+				}\n\
+				\n\
+				vec4 testColorMap(float Roughness) {\n\
+					vec4 color;\n\
+					if(faceIndex == 0)\n\
+						color = vec4(1.0,0.0,0.0,1.0);\n\
+					else if(faceIndex == 1)\n\
+						color = vec4(0.0,1.0,0.0,1.0);\n\
+					else if(faceIndex == 2)\n\
+						color = vec4(0.0,0.0,1.0,1.0);\n\
+					else if(faceIndex == 3)\n\
+						color = vec4(1.0,1.0,0.0,1.0);\n\
+					else if(faceIndex == 4)\n\
+						color = vec4(0.0,1.0,1.0,1.0);\n\
+					else\n\
+						color = vec4(1.0,0.0,1.0,1.0);\n\
+					color *= ( 1.0 - Roughness );\n\
+					return color;\n\
+				}\n\
+				void main() {\n\
+					vec3 sampleDirection;\n\
+					vec2 uv = vUv*2.0 - 1.0;\n\
+					float offset = -1.0/mapSize;\n\
+					const float a = -1.0;\n\
+					const float b = 1.0;\n\
+					float c = -1.0 + offset;\n\
+					float d = 1.0 - offset;\n\
+					float bminusa = b - a;\n\
+					uv.x = (uv.x - a)/bminusa * d - (uv.x - b)/bminusa * c;\n\
+					uv.y = (uv.y - a)/bminusa * d - (uv.y - b)/bminusa * c;\n\
+					if (faceIndex==0) {\n\
+						sampleDirection = vec3(1.0, -uv.y, -uv.x);\n\
+					} else if (faceIndex==1) {\n\
+						sampleDirection = vec3(-1.0, -uv.y, uv.x);\n\
+					} else if (faceIndex==2) {\n\
+						sampleDirection = vec3(uv.x, 1.0, uv.y);\n\
+					} else if (faceIndex==3) {\n\
+						sampleDirection = vec3(uv.x, -1.0, -uv.y);\n\
+					} else if (faceIndex==4) {\n\
+						sampleDirection = vec3(uv.x, -uv.y, 1.0);\n\
+					} else {\n\
+						sampleDirection = vec3(-uv.x, -uv.y, -1.0);\n\
+					}\n\
+					mat3 vecSpace = matrixFromVector(normalize(sampleDirection * queryScale));\n\
+					vec3 rgbColor = vec3(0.0);\n\
+					const int NumSamples = SAMPLES_PER_LEVEL;\n\
+					vec3 vect;\n\
+					float weight = 0.0;\n\
+					for( int i = 0; i < NumSamples; i ++ ) {\n\
+						float sini = sin(float(i));\n\
+						float cosi = cos(float(i));\n\
+						float r = rand(vec2(sini, cosi));\n\
+						vect = ImportanceSampleGGX(vec2(float(i) / float(NumSamples), r), vecSpace, roughness);\n\
+						float dotProd = dot(vect, normalize(sampleDirection));\n\
+						weight += dotProd;\n\
+						vec3 color = envMapTexelToLinear(textureCube(envMap,vect)).rgb;\n\
+						rgbColor.rgb += color;\n\
+					}\n\
+					rgbColor /= float(NumSamples);\n\
+					//rgbColor = testColorMap( roughness ).rgb;\n\
+					gl_FragColor = linearToOutputTexel( vec4( rgbColor, 1.0 ) );\n\
+				}",
+			blending: THREE.CustomBlending,
+			blendSrc: THREE.OneFactor,
+			blendDst: THREE.ZeroFactor,
+			blendSrcAlpha: THREE.OneFactor,
+			blendDstAlpha: THREE.ZeroFactor,
+			blendEquation: THREE.AddEquation
+		} );
+
+	}
+
+};
+
+/**
+ * @author Prashant Sharma / spidersharma03
+ * @author Ben Houston / bhouston, https://clara.io
+ *
+ * This class takes the cube lods(corresponding to different roughness values), and creates a single cubeUV
+ * Texture. The format for a given roughness set of faces is simply::
+ * +X+Y+Z
+ * -X-Y-Z
+ * For every roughness a mip map chain is also saved, which is essential to remove the texture artifacts due to
+ * minification.
+ * Right now for every face a PlaneMesh is drawn, which leads to a lot of geometry draw calls, but can be replaced
+ * later by drawing a single buffer and by sending the appropriate faceIndex via vertex attributes.
+ * The arrangement of the faces is fixed, as assuming this arrangement, the sampling function has been written.
+ */
+
+
+THREE.PMREMCubeUVPacker = function( cubeTextureLods, numLods ) {
+
+	this.cubeLods = cubeTextureLods;
+	this.numLods = numLods;
+	var size = cubeTextureLods[ 0 ].width * 4;
+
+	var sourceTexture = cubeTextureLods[ 0 ].texture;
+	var params = {
+		format: sourceTexture.format,
+		magFilter: sourceTexture.magFilter,
+		minFilter: sourceTexture.minFilter,
+		type: sourceTexture.type,
+		generateMipmaps: sourceTexture.generateMipmaps,
+		anisotropy: sourceTexture.anisotropy,
+		encoding: ( sourceTexture.encoding === THREE.RGBEEncoding ) ? THREE.RGBM16Encoding : sourceTexture.encoding
+	};
+
+	if ( params.encoding === THREE.RGBM16Encoding ) {
+
+		params.magFilter = THREE.LinearFilter;
+		params.minFilter = THREE.LinearFilter;
+
+	}
+
+	this.CubeUVRenderTarget = new THREE.WebGLRenderTarget( size, size, params );
+	this.CubeUVRenderTarget.texture.name = "PMREMCubeUVPacker.cubeUv";
+	this.CubeUVRenderTarget.texture.mapping = THREE.CubeUVReflectionMapping;
+	this.camera = new THREE.OrthographicCamera( - size * 0.5, size * 0.5, - size * 0.5, size * 0.5, 0.0, 1000 );
+
+	this.scene = new THREE.Scene();
+	this.scene.add( this.camera );
+
+	this.objects = [];
+
+	var faceOffsets = [];
+	faceOffsets.push( new THREE.Vector2( 0, 0 ) );
+	faceOffsets.push( new THREE.Vector2( 1, 0 ) );
+	faceOffsets.push( new THREE.Vector2( 2, 0 ) );
+	faceOffsets.push( new THREE.Vector2( 0, 1 ) );
+	faceOffsets.push( new THREE.Vector2( 1, 1 ) );
+	faceOffsets.push( new THREE.Vector2( 2, 1 ) );
+
+	var textureResolution = size;
+	size = cubeTextureLods[ 0 ].width;
+
+	var offset2 = 0;
+	var c = 4.0;
+	this.numLods = Math.log( cubeTextureLods[ 0 ].width ) / Math.log( 2 ) - 2; // IE11 doesn't support Math.log2
+	for ( var i = 0; i < this.numLods; i ++ ) {
+
+		var offset1 = ( textureResolution - textureResolution / c ) * 0.5;
+		if ( size > 16 ) c *= 2;
+		var nMips = size > 16 ? 6 : 1;
+		var mipOffsetX = 0;
+		var mipOffsetY = 0;
+		var mipSize = size;
+
+		for ( var j = 0; j < nMips; j ++ ) {
+
+			// Mip Maps
+			for ( var k = 0; k < 6; k ++ ) {
+
+				// 6 Cube Faces
+				var material = this.getShader();
+				material.uniforms[ 'envMap' ].value = this.cubeLods[ i ].texture;
+				material.envMap = this.cubeLods[ i ].texture;
+				material.uniforms[ 'faceIndex' ].value = k;
+				material.uniforms[ 'mapSize' ].value = mipSize;
+				var planeMesh = new THREE.Mesh(
+				new THREE.PlaneGeometry( mipSize, mipSize, 0 ),
+				material );
+				planeMesh.position.x = faceOffsets[ k ].x * mipSize - offset1 + mipOffsetX;
+				planeMesh.position.y = faceOffsets[ k ].y * mipSize - offset1 + offset2 + mipOffsetY;
+				planeMesh.material.side = THREE.DoubleSide;
+				this.scene.add( planeMesh );
+				this.objects.push( planeMesh );
+
+			}
+			mipOffsetY += 1.75 * mipSize;
+			mipOffsetX += 1.25 * mipSize;
+			mipSize /= 2;
+
+		}
+		offset2 += 2 * size;
+		if ( size > 16 ) size /= 2;
+
+	}
+
+};
+
+THREE.PMREMCubeUVPacker.prototype = {
+
+	constructor: THREE.PMREMCubeUVPacker,
+
+	update: function ( renderer ) {
+
+		var gammaInput = renderer.gammaInput;
+		var gammaOutput = renderer.gammaOutput;
+		var toneMapping = renderer.toneMapping;
+		var toneMappingExposure = renderer.toneMappingExposure;
+		var currentRenderTarget = renderer.getRenderTarget();
+		
+		renderer.gammaInput = false;
+		renderer.gammaOutput = false;
+		renderer.toneMapping = THREE.LinearToneMapping;
+		renderer.toneMappingExposure = 1.0;
+		renderer.render( this.scene, this.camera, this.CubeUVRenderTarget, false );
+
+		renderer.setRenderTarget( currentRenderTarget );
+		renderer.toneMapping = toneMapping;
+		renderer.toneMappingExposure = toneMappingExposure;
+		renderer.gammaInput = gammaInput;
+		renderer.gammaOutput = gammaOutput;
+
+	},
+
+	getShader: function () {
+
+		var shaderMaterial = new THREE.ShaderMaterial( {
+
+			uniforms: {
+				"faceIndex": { value: 0 },
+				"mapSize": { value: 0 },
+				"envMap": { value: null },
+				"testColor": { value: new THREE.Vector3( 1, 1, 1 ) }
+			},
+
+			vertexShader:
+				"precision highp float;\
+				varying vec2 vUv;\
+				void main() {\
+					vUv = uv;\
+					gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );\
+				}",
+
+			fragmentShader:
+				"precision highp float;\
+				varying vec2 vUv;\
+				uniform samplerCube envMap;\
+				uniform float mapSize;\
+				uniform vec3 testColor;\
+				uniform int faceIndex;\
+				\
+				void main() {\
+					vec3 sampleDirection;\
+					vec2 uv = vUv;\
+					uv = uv * 2.0 - 1.0;\
+					uv.y *= -1.0;\
+					if(faceIndex == 0) {\
+						sampleDirection = normalize(vec3(1.0, uv.y, -uv.x));\
+					} else if(faceIndex == 1) {\
+						sampleDirection = normalize(vec3(uv.x, 1.0, uv.y));\
+					} else if(faceIndex == 2) {\
+						sampleDirection = normalize(vec3(uv.x, uv.y, 1.0));\
+					} else if(faceIndex == 3) {\
+						sampleDirection = normalize(vec3(-1.0, uv.y, uv.x));\
+					} else if(faceIndex == 4) {\
+						sampleDirection = normalize(vec3(uv.x, -1.0, -uv.y));\
+					} else {\
+						sampleDirection = normalize(vec3(-uv.x, uv.y, -1.0));\
+					}\
+					vec4 color = envMapTexelToLinear( textureCube( envMap, sampleDirection ) );\
+					gl_FragColor = linearToOutputTexel( color );\
+				}",
+
+			blending: THREE.CustomBlending,
+			premultipliedAlpha: false,
+			blendSrc: THREE.OneFactor,
+			blendDst: THREE.ZeroFactor,
+			blendSrcAlpha: THREE.OneFactor,
+			blendDstAlpha: THREE.ZeroFactor,
+			blendEquation: THREE.AddEquation
+
+		} );
+
+		return shaderMaterial;
+
+	}
+
+};

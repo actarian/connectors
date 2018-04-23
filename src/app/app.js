@@ -1,4 +1,4 @@
-/* global window, document, console, TweenLite, Forge, Combiner, Orbiter */
+/* global window, document, console, TweenLite, Forge, Combiner, Orbiter, Library */
 
 (function () {
     'use strict';
@@ -10,19 +10,21 @@
 
     var forge = new Forge();
 
-    var container = document.querySelector('.editor');
     var btnAdd = document.querySelector('.btn-add');
     var btnRemove = document.querySelector('.btn-remove');
     var btnFlip = document.querySelector('.btn-flip');
+    var container = document.querySelector('.editor');
+    var w = container.offsetWidth,
+        h = container.offsetHeight;
 
     var renderer = new THREE.WebGLRenderer({
         alpha: true,
         antialias: true,
     });
-    renderer.setSize(container.offsetWidth, container.offsetHeight);
+    renderer.setSize(w, h);
     container.appendChild(renderer.domElement);
 
-    var camera = new THREE.PerspectiveCamera(45, container.offsetWidth / container.offsetHeight, 1, 50000);
+    var camera = new THREE.PerspectiveCamera(45, w / h, 1, 50000);
     // camera.position.set(0, 20, 40);
     // camera.lookAt(0, 0, 0);
     // controls.update() must be called after any manual changes to the camera's transform
@@ -32,19 +34,24 @@
 
     var scene = new THREE.Scene();
 
+    var library = new Library(renderer);
+
+    var lights = addLights(scene);
+
+    /*
     var light = new THREE.PointLight(0xddddee, 1, 2000);
     light.position.set(0, 200, 0);
     scene.add(light);
-    var helper = new THREE.PointLightHelper(light, 10);
-    scene.add(helper);
+    */
 
-    var floor = addFloor();
-    scene.add(floor);
+    var floor = addFloor(scene);
 
-    var combiner = new Combiner(scene);
+    var combiner = new Combiner(scene, library);
     scene.add(combiner.group);
 
     var orbiter = new Orbiter(scene, camera, controls);
+
+    var effects = new Effects(scene, camera, renderer, w, h);
 
     var raycaster = new THREE.Raycaster();
     var down;
@@ -53,15 +60,44 @@
         requestAnimationFrame(animate);
         // required if controls.enableDamping or controls.autoRotate are set to true
         // controls.update();
-        renderer.render(scene, camera);
         combiner.update();
-        floor.position.y = -combiner.size.y / 2;
-        floor.position.x = combiner.center.x;
-        floor.position.z = combiner.center.z;
+        //
+        var y = combiner.center.y - combiner.size.y / 2 - 3;
+        floor.position.y += (y - floor.position.y) / 8;
+        lights.position.x += (combiner.center.x - lights.position.x) / 8;
+        lights.position.y += (combiner.center.y - lights.position.y) / 8;
+        lights.position.z += (combiner.center.z - lights.position.z) / 8;
+        // floor.position.x = combiner.center.x;
+        // floor.position.z = combiner.center.z;
+        //
         orbiter.update();
+        effects.update();
+        // renderer.render(scene, camera);
     }
 
-    function addFloor() {
+    function addLights(scene) {
+        var lights = new THREE.Group();
+        lights.name = 'pivot';
+        lights.rotation.y = Math.PI / 180 * 90;
+        //
+        var light = new THREE.AmbientLight(0x444444);
+        scene.add(light);
+        // 
+        var light1 = new THREE.DirectionalLight(0xeedddd, 1.0, 2000);
+        light1.name = 'light1';
+        light1.position.set(-30, 20, 10);
+        lights.add(light1);
+        //
+        var light2 = new THREE.DirectionalLight(0xddddee, 1.0, 2000);
+        light2.name = 'light2';
+        light2.position.set(30, 20, -10);
+        lights.add(light2);
+        //
+        scene.add(lights);
+        return lights;
+    }
+
+    function addFloor(scene) {
         /*
         var radius = 200;
         var radials = 16;
@@ -69,32 +105,53 @@
         var divisions = 64;
         var floor = new THREE.PolarGridHelper(radius, radials, circles, divisions);
         */
-        var floor = new THREE.GridHelper(500, 500, 0x888888, 0xAAAAAA);
+        // var floor = new THREE.GridHelper(500, 500, 0x888888, 0xAAAAAA);
         // floor.rotateOnAxis( new THREE.Vector3( 1, 0, 0 ), 90 * ( Math.PI/180 ));	
+        var floor = new THREE.Mesh(new THREE.PlaneBufferGeometry(500, 500), library.materials.floor);
+        floor.name = 'floor';
+        floor.rotation.x = -Math.PI / 2;
+        floor.position.y = -3.5;
+        floor.visible = true;
+        scene.add(floor);
         return floor;
     }
 
+    function onAdd() {
+        if (!combiner.busy()) {
+            forge.load(function (geometry, materials) {
+                if (effects) effects.unselect();
+                var item = combiner.add(geometry, materials);
+                orbiter.fit(combiner);
+                combiner.entering++;
+                item.enter(function () {
+                    combiner.entering--;
+                });
+            });
+        }
+    }
+
+    function onRemove() {
+        if (!combiner.busy()) {
+            combiner.remove();
+            orbiter.fit(combiner);
+        }
+    }
+
+    function onFlip() {
+        combiner.flip(function () {
+            orbiter.fit(combiner);
+        });
+    }
+
     function onResize() {
-        camera.aspect = container.offsetWidth / container.offsetHeight;
+        w = container.offsetWidth;
+        h = container.offsetHeight;
+        camera.aspect = w / h;
         camera.updateProjectionMatrix();
         orbiter.fit(combiner);
-        renderer.setSize(container.offsetWidth, container.offsetHeight);
+        renderer.setSize(w, h);
+        if (effects) effects.resize(w, h);
     }
-
-    /*
-    function getTouch(e) {
-        return new THREE.Vector2(
-            (e.clientX / container.offsetWidth) * 2 - 1, -(e.clientY / container.offsetHeight) * 2 + 1
-        );
-    }
-
-        var raycaster = new THREE.Raycaster();
-        // raycaster.ray.direction.set(0, -1, 0);
-        var mouse = new THREE.Vector2(0, 0);
-
-        var down = null, move = null, moved = 0, pinching = false;
-        
-    */
 
     var moved = 0;
 
@@ -115,6 +172,9 @@
             down.index = selection.index;
             down.item = selection.item;
             down.rotation = selection.rotation;
+            if (effects) effects.select(down.item.model);
+        } else {
+            if (effects) effects.unselect();
         }
         orbiter.fit(combiner);
         /*
@@ -144,10 +204,9 @@
                 if (combiner.selection && combiner.selection.item === down.item) {
                     // ROTATE ITEM
                     // down.item.rotation = down.rotation + (move.y - down.y) * pow * 10;
-                    var index = down.index;
+                    // var index = down.index;
                     // down.item.outer.rotation.x = down.rotation.x + diff.y * Math.PI;
-                    down.item.outer.rotation.x = down.rotation.x + diff.y * pow * 10;
-                    combiner.adjust();
+                    combiner.rotate(diff.y * pow * 10);
                 } else {
                     // DRAG CAMERA
                     orbiter.dragAngle = down.startDragAngle + diff.x * pow * 10;
@@ -155,7 +214,7 @@
                     /*
                     // SOUND
                     if (combiner.selectedItem && combiner.selectedItem.type == APP.Parts.typeEnum.Sound) {
-                        if (Math.abs(move.x - down.mx) > container.offsetWidth / 3) {
+                        if (Math.abs(move.x - down.mx) > w / 3) {
                             down.mx = move.x;
                             scope.$root.$broadcast('onSoundSwing', scope.saber.sound, Math.abs(move.x - down.mx) / 100);
                         }
@@ -216,25 +275,6 @@
         });
     }
 
-    function onAdd() {
-        forge.load(function (geometry, materials) {
-            var item = combiner.add(geometry, materials);
-            orbiter.fit(combiner);
-            item.enter();
-        });
-    }
-
-    function onRemove() {
-        combiner.remove();
-        orbiter.fit(combiner);
-    }
-
-    function onFlip() {
-        combiner.flip(function () {
-            orbiter.fit(combiner);
-        });
-    }
-
     function onMouseDown(e) {
         onDown(e);
         addMouseListeners();
@@ -274,6 +314,6 @@
 
     animate();
 
-    onAdd();
+    setTimeout(onAdd, 1000);
 
 }());

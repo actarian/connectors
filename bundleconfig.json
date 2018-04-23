@@ -3,10 +3,20 @@
         "bower_components/greensock/src/uncompressed/easing/EasePack.js",
         "bower_components/greensock/src/uncompressed/TweenLite.js",
         "bower_components/three.js/build/three.js",
-        "bower_components/three.js/examples/js/controls/OrbitControls.js",
-        "bower_components/three.js/examples/js/controls/DragControls.js",
+        "bower_components/three.js/examples/js/Detector.js",
         "bower_components/three.js/examples/js/renderers/Projector.js",
-        "bower_components/three.js/examples/js/Detector.js"
+
+        "bower_components/three.js/examples/js/shaders/CopyShader.js",
+        "bower_components/three.js/examples/js/shaders/FXAAShader.js",
+        "bower_components/three.js/examples/js/postprocessing/EffectComposer.js",
+        "bower_components/three.js/examples/js/postprocessing/RenderPass.js",
+        "bower_components/three.js/examples/js/postprocessing/ShaderPass.js",
+        "bower_components/three.js/examples/js/postprocessing/OutlinePass.js",
+
+        "bower_components/three.js/examples/js/loaders/RGBELoader.js",
+        "bower_components/three.js/examples/js/loaders/HDRCubeTextureLoader.js",
+        "bower_components/three.js/examples/js/pmrem/PMREMGenerator.js",
+        "bower_components/three.js/examples/js/pmrem/PMREMCubeUVPacker.js"
     ],
     "outputFileName": "docs/js/vendors.js",
     "minify": {
@@ -23,9 +33,11 @@
 }, {
     "inputFiles": [
         "src/app/components/prototype.js",
-        "src/app/components/forge.js",
         "src/app/components/combiner.js",
+        "src/app/components/effects.js",
         "src/app/components/fitter.js",
+        "src/app/components/forge.js",
+        "src/app/components/library.js",
         "src/app/components/orbiter.js",
         "src/app/app.js"
     ],

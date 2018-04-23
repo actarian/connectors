@@ -19,9 +19,10 @@
         function load(callback) {
             var service = this;
             http({
-                url: i % 2 === 0 ? 'img/Curved Body 1.js' : 'img/Angled Emitter 1.js',
+                url: i % 2 === 0 ? 'img/Curved Body 2.js' : 'img/Angled Emitter 1.js',
                 onload: function (data) {
                     data = data.replace(new RegExp('transparency', 'g'), 'opacity');
+                    data = data.replace(new RegExp('.#QNAN0', 'g'), '.0');
                     var model = service.loader.parse(JSON.parse(data));
                     callback(model.geometry, model.materials);
                 }
