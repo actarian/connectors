@@ -1769,14 +1769,14 @@
         return;
     }
 
-    var forge = new Forge();
-
     var btnAdd = document.querySelector('.btn-add');
     var btnRemove = document.querySelector('.btn-remove');
     var btnFlip = document.querySelector('.btn-flip');
     var container = document.querySelector('.editor');
     var w = container.offsetWidth,
         h = container.offsetHeight;
+
+    var forge = new Forge();
 
     var renderer = new THREE.WebGLRenderer({
         alpha: true,
@@ -1789,7 +1789,7 @@
     // camera.position.set(0, 20, 40);
     // camera.lookAt(0, 0, 0);
     // controls.update() must be called after any manual changes to the camera's transform
-    var controls;
+    // var controls;
     // var controls = new THREE.OrbitControls(camera);
     // controls.update();
 
@@ -1799,26 +1799,16 @@
 
     var lights = addLights(scene);
 
-    /*
-    var light = new THREE.PointLight(0xddddee, 1, 2000);
-    light.position.set(0, 200, 0);
-    scene.add(light);
-    */
-
     var floor = addFloor(scene);
 
     var combiner = new Combiner(scene, library);
     scene.add(combiner.group);
 
-    var orbiter = new Orbiter(scene, camera, controls);
+    var orbiter = new Orbiter(scene, camera);
 
     var effects = new Effects(scene, camera, renderer, w, h);
 
-    var raycaster = new THREE.Raycaster();
-    var down;
-
-    function animate() {
-        requestAnimationFrame(animate);
+    function render() {
         // required if controls.enableDamping or controls.autoRotate are set to true
         // controls.update();
         combiner.update();
@@ -1834,6 +1824,11 @@
         orbiter.update();
         effects.update();
         // renderer.render(scene, camera);
+    }
+
+    function animate() {
+        render();
+        requestAnimationFrame(animate);
     }
 
     function addLights(scene) {
@@ -1854,6 +1849,11 @@
         light2.position.set(30, 20, -10);
         lights.add(light2);
         //
+        /*
+        var light = new THREE.PointLight(0xddddee, 1, 2000);
+        light.position.set(0, 200, 0);
+        scene.add(light);
+        */
         scene.add(lights);
         return lights;
     }
@@ -1914,6 +1914,9 @@
         if (effects) effects.resize(w, h);
     }
 
+
+    var raycaster = new THREE.Raycaster();
+    var down;
     var moved = 0;
 
     function onDown(e) {
@@ -1927,9 +1930,11 @@
         var selection = combiner.select(raycaster);
         // console.log('selection', selection);
         if (selection) {
+            /*
             if (controls) {
                 controls.enabled = false;
             }
+            */
             down.index = selection.index;
             down.item = selection.item;
             down.rotation = selection.rotation;
@@ -2008,9 +2013,11 @@
         }
         down = null;
         moved = 0;
+        /*
         if (controls) {
             controls.enabled = true;
         }
+        */
         removeListeners();
     }
 
