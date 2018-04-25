@@ -4,11 +4,11 @@
     'use strict';
 
     var DEBUG = {
-        HELPER: true,
-        JOINTS: true,
+        HELPER: false,
+        JOINTS: false,
         MODELS: true,
         ANGLE: false,
-        FINISH: 'standard', // 'weathered',
+        FINISH: 'standard', // 'black', // 'weathered',
     };
 
     var RAD = Math.PI / 180;
@@ -161,11 +161,18 @@
                 group = item.group,
                 outer = item.outer,
                 inner = item.inner;
+            var minx = Number.POSITIVE_INFINITY,
+                maxx = Number.NEGATIVE_INFINITY;
             for (var v = 0; v < geometry.vertices.length; v++) {
                 geometry.vertices[v].x *= SCALE;
                 geometry.vertices[v].y *= SCALE;
                 geometry.vertices[v].z *= SCALE;
+                minx = Math.min(minx, geometry.vertices[v].x);
+                maxx = Math.max(maxx, geometry.vertices[v].x);
             }
+            var dx = (maxx + minx) / 2;
+            inner.position.x = dx;
+            console.log(minx, maxx, dx);
             materials = getMaterials(materials, library, finish);
             var model = new THREE.Mesh(geometry, materials);
             box.setFromObject(model);
@@ -176,7 +183,6 @@
             item.quaternionR = new THREE.Quaternion().multiplyQuaternions(item.quaternionL, flipQuaternion).multiply(quaternionD.inverse());
             item.positionL = new THREE.Vector3();
             item.positionR = joints.left.origin.clone().sub(joints.right.origin.clone().applyQuaternion(item.quaternionR));
-            console.log(item.positionR);
             model.geometry.computeVertexNormals();
             model.geometry.verticesNeedUpdate = true;
             model.geometry.uvsNeedUpdate = true;
@@ -231,7 +237,7 @@
                     */
                 }
             }
-            inner.position.set(size.x / 2, 0, 0);
+            inner.position.set(size.x / 2 - dx, 0, 0);
             inner.add(model);
             outer.add(inner);
             group.add(outer);
@@ -348,10 +354,11 @@
                         color: 0xff00ff
                     })
                 );
-                combiner.scene.add(combiner.boxhelper);
-                combiner.scene.add(combiner.originhelper);
-                combiner.scene.add(combiner.centerhelper);
+                combiner.group.add(combiner.originhelper);
+                scene.add(combiner.boxhelper);
+                scene.add(combiner.centerhelper);
             }
+            scene.add(combiner.group);
         }
 
         Combiner.prototype = {
@@ -454,7 +461,7 @@
                 //} else {
                 //    item.group.rotation.z = rad(30);
                 //}
-                console.log(left.origin);
+                // console.log(left.origin);
                 // right.updateMatrixWorld();
                 right.getWorldQuaternion(quaternionR);
                 right.getWorldPosition(positionR);

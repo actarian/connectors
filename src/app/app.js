@@ -41,7 +41,6 @@
     var floor = addFloor(scene);
 
     var combiner = new Combiner(scene, library);
-    scene.add(combiner.group);
 
     var orbiter = new Orbiter(scene, camera);
 
@@ -152,7 +151,6 @@
         renderer.setSize(w, h);
         if (effects) effects.resize(w, h);
     }
-
 
     var raycaster = new THREE.Raycaster();
     var down;
@@ -274,7 +272,7 @@
     }
 
     function onDoubleClick(e) {
-        console.log('onDoubleClick');
+        // console.log('onDoubleClick');
         var touch = getTouch(e);
         raycaster.setFromCamera(touch, camera);
         combiner.hitAndFlip(raycaster, function () {
