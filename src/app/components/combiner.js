@@ -136,14 +136,14 @@
             if (!joints.left) {
                 joints.left = new THREE.Group();
                 joints.left.position.set(-size.x / 2, 0, 0);
-                joints.left.origin = joint.position.clone();
+                joints.left.origin = joints.left.position.clone();
                 joints.left.normal = new THREE.Vector3(-1, 0, 0);
                 joints.left.c = colors[0];
             }
             if (!joints.right) {
                 joints.right = new THREE.Group();
                 joints.right.position.set(size.x / 2, 0, 0);
-                joints.right.origin = joint.position.clone();
+                joints.right.origin = joints.right.position.clone();
                 joints.right.normal = new THREE.Vector3(1, 0, 0);
                 joints.right.c = colors[1];
             }

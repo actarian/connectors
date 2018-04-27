@@ -184,36 +184,6 @@
                         }),
                         */
                     },
-                    /*
-                    silver: {
-                        silver: new THREE.MeshPhongMaterial({
-                            name: 'chrome',
-                            color: 0x888888,
-                            specular: 0x555555,
-                            specularMap: textures.silver,
-                            shininess: 30,
-                            reflectivity: 0.15,
-                            envMap: textures.env,
-                            combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                        }),
-                        black: new THREE.MeshPhongMaterial({
-                            name: 'black',
-                            color: 0x777777,
-                            specular: 0x444444,
-                            specularMap: textures.silver,
-                            shininess: 30,
-                            reflectivity: 0.15,
-                            envMap: textures.env,
-                            combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                        }),
-                    },
-                    */
                     black: {
                         silver: new THREE.MeshPhongMaterial({
                             name: 'chrome',
@@ -325,9 +295,38 @@
                             reflectivity: 0
                         }),
                     },
+                    /*
+                    silver: {
+                        silver: new THREE.MeshPhongMaterial({
+                            name: 'chrome',
+                            color: 0x888888,
+                            specular: 0x555555,
+                            specularMap: textures.silver,
+                            shininess: 30,
+                            reflectivity: 0.15,
+                            envMap: textures.env,
+                            // combine: THREE.MixOperation,
+                            bumpMap: textures.silver,
+                            bumpScale: 0.003,
+                            // metal: true,
+                        }),
+                        black: new THREE.MeshPhongMaterial({
+                            name: 'black',
+                            color: 0x777777,
+                            specular: 0x444444,
+                            specularMap: textures.silver,
+                            shininess: 30,
+                            reflectivity: 0.15,
+                            envMap: textures.env,
+                            // combine: THREE.MixOperation,
+                            bumpMap: textures.silver,
+                            bumpScale: 0.003,
+                            // metal: true,
+                        }),
+                    },
+                    */
                 };
             } else {
-
                 return {
                     floor: new THREE.MeshStandardMaterial({
                         name: 'floor',
@@ -408,9 +407,9 @@
                             name: 'chrome',
                             color: 0x888888,
                             roughness: 0.5,
-                            roughnessMap: textures.silver,
+                            // roughnessMap: textures.silver,
                             metalness: 0.9,
-                            metalnessMap: textures.weathered,
+                            metalnessMap: textures.silver,
                             envMap: textures.env,
                             envMapIntensity: 1.0,
                             // combine: THREE.MixOperation,
@@ -419,12 +418,11 @@
                         }),
                         black: new THREE.MeshStandardMaterial({
                             name: 'black',
-                            color: 0x0d0d0d,
-                            roughness: 0.4,
-                            // roughnessMap: textures.silver,
+                            color: 0x101010, // 0x0d0d0d,
+                            roughness: 0.5,
                             metalness: 0.4,
-                            // bumpMap: textures.bump,
-                            // bumpScale: 0.03,
+                            bumpMap: textures.sand,
+                            bumpScale: 0.01,
                             envMap: textures.env,
                             envMapIntensity: 1.0,
                             // combine: THREE.MixOperation,
@@ -468,36 +466,6 @@
                         }),
                         */
                     },
-                    /*
-                    silver: {
-                        silver: new THREE.MeshPhongMaterial({
-                            name: 'chrome',
-                            color: 0x888888,
-                            specular: 0x555555,
-                            specularMap: textures.silver,
-                            shininess: 30,
-                            reflectivity: 0.15,
-                            envMap: textures.env,
-                            // combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                        }),
-                        black: new THREE.MeshPhongMaterial({
-                            name: 'black',
-                            color: 0x777777,
-                            specular: 0x444444,
-                            specularMap: textures.silver,
-                            shininess: 30,
-                            reflectivity: 0.15,
-                            envMap: textures.env,
-                            // combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                        }),
-                    },
-                    */
                     black: {
                         silver: new THREE.MeshStandardMaterial({
                             name: 'chrome',
@@ -711,6 +679,12 @@
             textures.weathered.wrapT = THREE.RepeatWrapping;
             // textures.weathered.repeat.set(1, 1);
             // 
+            textures.sand = service.getTexture('sand.bump.jpg');
+            textures.sand.anisotropy = ANISOTROPY;
+            textures.sand.wrapS = THREE.RepeatWrapping;
+            textures.sand.wrapT = THREE.RepeatWrapping;
+            textures.sand.repeat.set(5, 5);
+            //
             textures.bump = service.getTexture('brushed-dark.jpg');
             textures.bump.anisotropy = ANISOTROPY;
             textures.bump.wrapS = THREE.RepeatWrapping;
