@@ -3,12 +3,38 @@
 (function () {
     'use strict';
 
+    function calcNormal(normals, normal, angle) {
+        var allowed = normals.filter(function (n) {
+            return n.angleTo(normal) < angle * Math.PI / 180;
+        });
+        return allowed.reduce(function (a, b) {
+            return a.clone().add(b);
+        }).normalize();
+    }
+
+    THREE.GeometryUtils.computeVertexNormals = function (geometry, angle) {
+        geometry.computeFaceNormals();
+        var vertices = geometry.vertices.map(function () {
+            return [];
+        });
+        geometry.faces.map(function (face) {
+            vertices[face.a].push(face.normal);
+            vertices[face.b].push(face.normal);
+            vertices[face.c].push(face.normal);
+        });
+        geometry.faces.map(function (face) {
+            face.vertexNormals[0] = calcNormal(vertices[face.a], face.normal, angle);
+            face.vertexNormals[1] = calcNormal(vertices[face.b], face.normal, angle);
+            face.vertexNormals[2] = calcNormal(vertices[face.c], face.normal, angle);
+        });
+        if (geometry.faces.length > 0) geometry.normalsNeedUpdate = true;
+    };
+
     var DEBUG = {
         HELPER: false,
         JOINTS: false,
         MODELS: true,
         ANGLE: false,
-        FINISH: 'standard', // 'black', // 'weathered',
     };
 
     var RAD = Math.PI / 180;
@@ -57,6 +83,49 @@
             });
         }
 
+        function flip(callback) {
+            var item = this,
+                inner = item.inner;
+            // console.log('flip()');
+            item.flipped = !item.flipped;
+            var animation = {
+                pow: item.flipped ? 0 : 1
+            };
+            TweenLite.to(animation, 0.3, {
+                pow: item.flipped ? 1 : 0,
+                ease: Power2.easeOut,
+                overwrite: 'all',
+                // ease: Elastic.easeOut,
+                onUpdate: function () {
+                    THREE.Quaternion.slerp(item.quaternionL, item.quaternionR, item.model.quaternion, animation.pow);
+                    item.model.position.lerpVectors(item.positionL, item.positionR, animation.pow);
+                },
+                onComplete: function () {
+                    // console.log('flipped');
+                    // item.setFlip();
+                    if (typeof callback === 'function') {
+                        callback();
+                    }
+                },
+            });
+            /*
+            TweenLite.to(inner.rotation, 0.3, {
+                y: item.flipped ? Math.PI : 0,
+                ease: Power2.easeOut,
+                overwrite: 'all',
+                // ease: Elastic.easeOut,
+                // onUpdate: function() { },
+                onComplete: function () {
+                    // console.log('flipped');
+                    item.setFlip();
+                    if (typeof callback === 'function') {
+                        callback();
+                    }
+                },
+            });
+            */
+        }
+
         function getCentroid(vertices) {
             var center = vertices.reduce(function (a, b) {
                 return {
@@ -66,26 +135,6 @@
                 };
             });
             return new THREE.Vector3().add(center).divideScalar(vertices.length);
-        }
-
-        function getMaterials(materials, library, finish) {
-            var names = ['left', 'right', 'top', 'bottom'],
-                colors = [0xff0000, 0x00ff00, 0x0000ff, 0xffff00],
-                index, finish = finish || DEBUG.FINISH;
-            return materials.map(function (material, index) {
-                var i = names.indexOf(material.name);
-                if (i !== -1) {
-                    return new THREE.MeshStandardMaterial({
-                        name: material.name,
-                        color: new THREE.Color(colors[i]),
-                        visible: false,
-                    });
-                } else {
-                    material.name = material.name.replace('chrome', 'silver');
-                    // console.log(material.name);
-                    return library.materials[finish][material.name].clone();
-                }
-            });
         }
 
         function getJoints(geometry, materials, size) {
@@ -154,7 +203,7 @@
             return joints;
         }
 
-        function load(geometry, materials, library, finish) {
+        function load(geometry, materials) {
             var item = this,
                 box = item.box,
                 size = item.size,
@@ -170,10 +219,11 @@
                 minx = Math.min(minx, geometry.vertices[v].x);
                 maxx = Math.max(maxx, geometry.vertices[v].x);
             }
+            // var buffergeometry = new THREE.BufferGeometry();
+            // buffergeometry.fromGeometry(geometry);
             var dx = (maxx + minx) / 2;
             inner.position.x = dx;
             console.log(minx, maxx, dx);
-            materials = getMaterials(materials, library, finish);
             var model = new THREE.Mesh(geometry, materials);
             box.setFromObject(model);
             box.getSize(size);
@@ -183,9 +233,15 @@
             item.quaternionR = new THREE.Quaternion().multiplyQuaternions(item.quaternionL, flipQuaternion).multiply(quaternionD.inverse());
             item.positionL = new THREE.Vector3();
             item.positionR = joints.left.origin.clone().sub(joints.right.origin.clone().applyQuaternion(item.quaternionR));
-            model.geometry.computeVertexNormals();
+            model.geometry.mergeVertices();
+            THREE.GeometryUtils.computeVertexNormals(model.geometry, 20);
+            // model.geometry.computeFaceNormals();
+            // model.geometry.computeVertexNormals();
             model.geometry.verticesNeedUpdate = true;
             model.geometry.uvsNeedUpdate = true;
+            // model.geometry = Curvature.setEdges(model.geometry, 40);
+            model.geometry = new THREE.BufferGeometry().fromGeometry(model.geometry);
+            Curvature.setGeometry(model.geometry);
             // model.geometry.mergeVertices();
             // model.geometry.computeFaceNormals();
             // model.geometry.normalsNeedUpdate = true;
@@ -276,62 +332,18 @@
             */
         }
 
-        function flip(callback) {
-            var item = this,
-                inner = item.inner;
-            // console.log('flip()');
-            item.flipped = !item.flipped;
-            var animation = {
-                pow: item.flipped ? 0 : 1
-            };
-            TweenLite.to(animation, 0.3, {
-                pow: item.flipped ? 1 : 0,
-                ease: Power2.easeOut,
-                overwrite: 'all',
-                // ease: Elastic.easeOut,
-                onUpdate: function () {
-                    THREE.Quaternion.slerp(item.quaternionL, item.quaternionR, item.model.quaternion, animation.pow);
-                    item.model.position.lerpVectors(item.positionL, item.positionR, animation.pow);
-                },
-                onComplete: function () {
-                    // console.log('flipped');
-                    // item.setFlip();
-                    if (typeof callback === 'function') {
-                        callback();
-                    }
-                },
-            });
-            /*
-            TweenLite.to(inner.rotation, 0.3, {
-                y: item.flipped ? Math.PI : 0,
-                ease: Power2.easeOut,
-                overwrite: 'all',
-                // ease: Elastic.easeOut,
-                // onUpdate: function() { },
-                onComplete: function () {
-                    // console.log('flipped');
-                    item.setFlip();
-                    if (typeof callback === 'function') {
-                        callback();
-                    }
-                },
-            });
-            */
-        }
-
         return CombinerItem;
 
     }();
 
     var Combiner = function () {
 
-        function Combiner(scene, library) {
+        function Combiner(scene) {
             var combiner = this;
             combiner.flags = {
                 rotate: false,
             };
             combiner.scene = scene;
-            combiner.library = library;
             combiner.flipping = 0;
             combiner.entering = 0;
             combiner.items = [];
@@ -370,17 +382,20 @@
             flip: flip,
             flipItem: flipItem,
             hitAndFlip: hitAndFlip,
+            prev: prev,
             pop: pop,
+            next: next,
             remove: remove,
             rotate: rotate,
             select: select,
+            selectedItem: selectedItem,
+            selectedModel: selectedModel,
             unselect: unselect,
             update: update,
         };
 
-        function add(geometry, materials, library, finish) {
+        function add(geometry, materials) {
             var combiner = this,
-                library = combiner.library,
                 box = combiner.box,
                 size = combiner.size,
                 items = combiner.items,
@@ -389,7 +404,7 @@
 
             combiner.unselect();
             var item = new CombinerItem();
-            item.load(geometry, materials, library, finish);
+            item.load(geometry, materials);
             items.push(item);
             combiner.hittables = items.map(function (item) {
                 return item.model;
@@ -495,9 +510,7 @@
         }
 
         function flip(callback) {
-            var combiner = this,
-                items = combiner.items,
-                hittables = combiner.hittables;
+            var combiner = this;
             if (combiner.selection) {
                 combiner.flipItem(combiner.selection.item, callback);
             }
@@ -530,6 +543,26 @@
             }
         }
 
+        function next() {
+            var combiner = this,
+                items = combiner.items;
+            var selection = null;
+
+            if (items.length) {
+                var index = combiner.selection ? combiner.selection.index : -1;
+                index = index + 1 >= items.length ? 0 : index + 1;
+                var item = items[index];
+                var rotation = item.outer.rotation.clone();
+                selection = {
+                    index: index,
+                    item: item,
+                    rotation: rotation,
+                };
+                combiner.selection = selection;
+            }
+            return selection;
+        }
+
         function pop() {
             var combiner = this,
                 items = combiner.items,
@@ -546,6 +579,26 @@
                 combiner.adjust();
                 return item;
             }
+        }
+
+        function prev() {
+            var combiner = this,
+                items = combiner.items;
+            var selection = null;
+
+            if (items.length) {
+                var index = combiner.selection ? combiner.selection.index : 0;
+                index = index - 1 < 0 ? items.length - 1 : index - 1;
+                var item = items[index];
+                var rotation = item.outer.rotation.clone();
+                selection = {
+                    index: index,
+                    item: item,
+                    rotation: rotation,
+                };
+                combiner.selection = selection;
+            }
+            return selection;
         }
 
         function remove() {
@@ -609,6 +662,20 @@
                 combiner.selection = selection;
             }
             return selection;
+        }
+
+        function selectedItem(callback) {
+            var combiner = this;
+            if (combiner.selection && typeof callback === 'function') {
+                callback(combiner.selection.item);
+            }
+        }
+
+        function selectedModel(callback) {
+            var combiner = this;
+            if (combiner.selection && typeof callback === 'function') {
+                callback(combiner.selection.item.model);
+            }
         }
 
         function unselect() {

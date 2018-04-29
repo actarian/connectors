@@ -51748,6 +51748,6119 @@ THREE.OutlinePass.BlurDirectionX = new THREE.Vector2( 1.0, 0.0 );
 THREE.OutlinePass.BlurDirectionY = new THREE.Vector2( 0.0, 1.0 );
 
 /**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.GLNode = function ( type ) {
+
+	this.uuid = THREE.Math.generateUUID();
+
+	this.name = "";
+	this.allows = {};
+
+	this.type = type;
+
+	this.userData = {};
+
+};
+
+THREE.GLNode.prototype.isNode = true;
+
+THREE.GLNode.prototype.parse = function ( builder, context ) {
+
+	context = context || {};
+
+	builder.parsing = true;
+
+	var material = builder.material;
+
+	this.build( builder.addCache( context.cache, context.requires ).addSlot( context.slot ), 'v4' );
+
+	material.clearVertexNode();
+	material.clearFragmentNode();
+
+	builder.removeCache().removeSlot();
+
+	builder.parsing = false;
+
+};
+
+THREE.GLNode.prototype.parseAndBuildCode = function ( builder, output, context ) {
+
+	context = context || {};
+
+	this.parse( builder, context );
+
+	return this.buildCode( builder, output, context );
+
+};
+
+THREE.GLNode.prototype.buildCode = function ( builder, output, context ) {
+
+	context = context || {};
+
+	var material = builder.material;
+
+	var data = { result: this.build( builder.addCache( context.cache, context.requires ).addSlot( context.slot ), output ) };
+
+	if ( builder.isShader( 'vertex' ) ) data.code = material.clearVertexNode();
+	else data.code = material.clearFragmentNode();
+
+	builder.removeCache().removeSlot();
+
+	return data;
+
+};
+
+THREE.GLNode.prototype.build = function ( builder, output, uuid ) {
+
+	output = output || this.getType( builder, output );
+
+	var material = builder.material, data = material.getDataNode( uuid || this.uuid );
+
+	if ( builder.parsing ) this.appendDepsNode( builder, data, output );
+
+	if ( this.allows[ builder.shader ] === false ) {
+
+		throw new Error( 'Shader ' + shader + ' is not compatible with this node.' );
+
+	}
+
+	if ( material.nodes.indexOf( this ) === - 1 ) {
+
+		material.nodes.push( this );
+
+	}
+
+	if ( this.updateFrame !== undefined && material.updaters.indexOf( this ) === - 1 ) {
+
+		material.updaters.push( this );
+
+	}
+
+	return this.generate( builder, output, uuid );
+
+};
+
+THREE.GLNode.prototype.appendDepsNode = function ( builder, data, output ) {
+
+	data.deps = ( data.deps || 0 ) + 1;
+
+	var outputLen = builder.getFormatLength( output );
+
+	if ( outputLen > ( data.outputMax || 0 ) || this.getType( builder, output ) ) {
+
+		data.outputMax = outputLen;
+		data.output = output;
+
+	}
+
+};
+
+THREE.GLNode.prototype.getType = function ( builder, output ) {
+
+	return output === 'sampler2D' || output === 'samplerCube' ? output : this.type;
+
+};
+
+THREE.GLNode.prototype.getJSONNode = function ( meta ) {
+
+	var isRootObject = ( meta === undefined || typeof meta === 'string' );
+
+	if ( ! isRootObject && meta.nodes[ this.uuid ] !== undefined ) {
+
+		return meta.nodes[ this.uuid ];
+
+	}
+
+};
+
+THREE.GLNode.prototype.createJSONNode = function ( meta ) {
+
+	var isRootObject = ( meta === undefined || typeof meta === 'string' );
+
+	var data = {};
+
+	if ( typeof this.nodeType !== "string" ) throw new Error( "Node does not allow serialization." );
+
+	data.uuid = this.uuid;
+	data.type = this.nodeType + "Node";
+
+	if ( this.name !== "" ) data.name = this.name;
+
+	if ( JSON.stringify( this.userData ) !== '{}' ) data.userData = this.userData;
+
+	if ( ! isRootObject ) {
+
+		meta.nodes[ this.uuid ] = data;
+
+	}
+
+	return data;
+
+};
+
+THREE.GLNode.prototype.toJSON = function ( meta ) {
+
+	return this.getJSONNode( meta ) || this.createJSONNode( meta );
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.RawNode = function ( value ) {
+
+	THREE.GLNode.call( this, 'v4' );
+
+	this.value = value;
+
+};
+
+THREE.RawNode.prototype = Object.create( THREE.GLNode.prototype );
+THREE.RawNode.prototype.constructor = THREE.RawNode;
+THREE.RawNode.prototype.nodeType = "Raw";
+
+THREE.RawNode.prototype.generate = function ( builder ) {
+
+	var material = builder.material;
+
+	var data = this.value.parseAndBuildCode( builder, this.type );
+
+	var code = data.code + '\n';
+
+	if ( builder.shader == 'vertex' ) {
+
+		code += 'gl_Position = ' + data.result + ';';
+
+	} else {
+
+		code += 'gl_FragColor = ' + data.result + ';';
+
+	}
+
+	return code;
+
+};
+
+THREE.RawNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.value = this.value.toJSON( meta ).uuid;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * Automatic node cache
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.TempNode = function ( type, params ) {
+
+	THREE.GLNode.call( this, type );
+
+	params = params || {};
+
+	this.shared = params.shared !== undefined ? params.shared : true;
+	this.unique = params.unique !== undefined ? params.unique : false;
+
+};
+
+THREE.TempNode.prototype = Object.create( THREE.GLNode.prototype );
+THREE.TempNode.prototype.constructor = THREE.TempNode;
+
+THREE.TempNode.prototype.build = function ( builder, output, uuid, ns ) {
+
+	output = output || this.getType( builder );
+
+	var material = builder.material;
+
+	if ( this.isShared( builder, output ) ) {
+
+		var isUnique = this.isUnique( builder, output );
+
+		if ( isUnique && this.constructor.uuid === undefined ) {
+
+			this.constructor.uuid = THREE.Math.generateUUID();
+
+		}
+
+		uuid = builder.getUuid( uuid || this.getUuid(), ! isUnique );
+
+		var data = material.getDataNode( uuid );
+
+		if ( builder.parsing ) {
+
+			if ( data.deps || 0 > 0 ) {
+
+				this.appendDepsNode( builder, data, output );
+
+				return this.generate( builder, type, uuid );
+
+			}
+
+			return THREE.GLNode.prototype.build.call( this, builder, output, uuid );
+
+		} else if ( isUnique ) {
+
+			data.name = data.name || THREE.GLNode.prototype.build.call( this, builder, output, uuid );
+
+			return data.name;
+
+		} else if ( ! builder.optimize || data.deps == 1 ) {
+
+			return THREE.GLNode.prototype.build.call( this, builder, output, uuid );
+
+		}
+
+		uuid = this.getUuid( false );
+
+		var name = this.getTemp( builder, uuid );
+		var type = data.output || this.getType( builder );
+
+		if ( name ) {
+
+			return builder.format( name, type, output );
+
+		} else {
+
+			name = THREE.TempNode.prototype.generate.call( this, builder, output, uuid, data.output, ns );
+
+			var code = this.generate( builder, type, uuid );
+
+			if ( builder.isShader( 'vertex' ) ) material.addVertexNode( name + '=' + code + ';' );
+			else material.addFragmentNode( name + '=' + code + ';' );
+
+			return builder.format( name, type, output );
+
+		}
+
+	}
+
+	return THREE.GLNode.prototype.build.call( this, builder, output, uuid );
+
+};
+
+THREE.TempNode.prototype.isShared = function ( builder, output ) {
+
+	return output !== 'sampler2D' && output !== 'samplerCube' && this.shared;
+
+};
+
+THREE.TempNode.prototype.isUnique = function ( builder, output ) {
+
+	return this.unique;
+
+};
+
+THREE.TempNode.prototype.getUuid = function ( unique ) {
+
+	var uuid = unique || unique == undefined ? this.constructor.uuid || this.uuid : this.uuid;
+
+	if ( typeof this.scope == "string" ) uuid = this.scope + '-' + uuid;
+
+	return uuid;
+
+};
+
+THREE.TempNode.prototype.getTemp = function ( builder, uuid ) {
+
+	uuid = uuid || this.uuid;
+
+	var material = builder.material;
+
+	if ( builder.isShader( 'vertex' ) && material.vertexTemps[ uuid ] ) return material.vertexTemps[ uuid ].name;
+	else if ( material.fragmentTemps[ uuid ] ) return material.fragmentTemps[ uuid ].name;
+
+};
+
+THREE.TempNode.prototype.generate = function ( builder, output, uuid, type, ns ) {
+
+	if ( ! this.isShared( builder, output ) ) console.error( "THREE.TempNode is not shared!" );
+
+	uuid = uuid || this.uuid;
+
+	if ( builder.isShader( 'vertex' ) ) return builder.material.getVertexTemp( uuid, type || this.getType( builder ), ns ).name;
+	else return builder.material.getFragmentTemp( uuid, type || this.getType( builder ), ns ).name;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.InputNode = function ( type, params ) {
+
+	params = params || {};
+	params.shared = params.shared !== undefined ? params.shared : false;
+
+	THREE.TempNode.call( this, type, params );
+
+	this.readonly = false;
+
+};
+
+THREE.InputNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.InputNode.prototype.constructor = THREE.InputNode;
+
+THREE.InputNode.prototype.isReadonly = function ( builder ) {
+
+	return this.readonly;
+
+};
+
+THREE.InputNode.prototype.generate = function ( builder, output, uuid, type, ns, needsUpdate ) {
+
+	var material = builder.material;
+
+	uuid = builder.getUuid( uuid || this.getUuid() );
+	type = type || this.getType( builder );
+
+	var data = material.getDataNode( uuid ),
+		readonly = this.isReadonly( builder ) && this.generateReadonly !== undefined;
+
+	if ( readonly ) {
+
+		return this.generateReadonly( builder, output, uuid, type, ns, needsUpdate );
+
+	} else {
+
+		if ( builder.isShader( 'vertex' ) ) {
+
+			if ( ! data.vertex ) {
+
+				data.vertex = material.createVertexUniform( type, this.value, ns, needsUpdate );
+
+			}
+
+			return builder.format( data.vertex.name, type, output );
+
+		} else {
+
+			if ( ! data.fragment ) {
+
+				data.fragment = material.createFragmentUniform( type, this.value, ns, needsUpdate );
+
+			}
+
+			return builder.format( data.fragment.name, type, output );
+
+		}
+
+	}
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.ConstNode = function ( src, useDefine ) {
+
+	THREE.TempNode.call( this );
+
+	this.eval( src || THREE.ConstNode.PI, useDefine );
+
+};
+
+THREE.ConstNode.PI = 'PI';
+THREE.ConstNode.PI2 = 'PI2';
+THREE.ConstNode.RECIPROCAL_PI = 'RECIPROCAL_PI';
+THREE.ConstNode.RECIPROCAL_PI2 = 'RECIPROCAL_PI2';
+THREE.ConstNode.LOG2 = 'LOG2';
+THREE.ConstNode.EPSILON = 'EPSILON';
+
+THREE.ConstNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.ConstNode.prototype.constructor = THREE.ConstNode;
+THREE.ConstNode.prototype.nodeType = "Const";
+
+THREE.ConstNode.prototype.getType = function ( builder ) {
+
+	return builder.getTypeByFormat( this.type );
+
+};
+
+THREE.ConstNode.prototype.eval = function ( src, useDefine ) {
+
+	src = ( src || '' ).trim();
+
+	var name, type, value = "";
+
+	var rDeclaration = /^([a-z_0-9]+)\s([a-z_0-9]+)\s?\=?\s?(.*?)(\;|$)/i;
+	var match = src.match( rDeclaration );
+
+	this.useDefine = useDefine;
+
+	if ( match && match.length > 1 ) {
+
+		type = match[ 1 ];
+		name = match[ 2 ];
+		value = match[ 3 ];
+
+	} else {
+
+		name = src;
+		type = 'fv1';
+
+	}
+
+	this.name = name;
+	this.type = type;
+	this.value = value;
+
+};
+
+THREE.ConstNode.prototype.build = function ( builder, output ) {
+
+	if ( output === 'source' ) {
+
+		if ( this.value ) {
+
+			if ( this.useDefine ) {
+
+				return '#define ' + this.name + ' ' + this.value;
+
+			}
+
+			return 'const ' + this.type + ' ' + this.name + ' = ' + this.value + ';';
+
+		}
+
+	} else {
+
+		builder.include( this );
+
+		return builder.format( this.name, this.getType( builder ), output );
+
+	}
+
+};
+
+THREE.ConstNode.prototype.generate = function ( builder, output ) {
+
+	return builder.format( this.name, this.getType( builder ), output );
+
+};
+
+THREE.ConstNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.name = this.name;
+		data.out = this.type;
+
+		if ( this.value ) data.value = this.value;
+		if ( data.useDefine === true ) data.useDefine = true;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.VarNode = function ( type ) {
+
+	THREE.GLNode.call( this, type );
+
+};
+
+THREE.VarNode.prototype = Object.create( THREE.GLNode.prototype );
+THREE.VarNode.prototype.constructor = THREE.VarNode;
+THREE.VarNode.prototype.nodeType = "Var";
+
+THREE.VarNode.prototype.getType = function ( builder ) {
+
+	return builder.getTypeByFormat( this.type );
+
+};
+
+THREE.VarNode.prototype.generate = function ( builder, output ) {
+
+	var varying = builder.material.getVar( this.uuid, this.type );
+
+	return builder.format( varying.name, this.getType( builder ), output );
+
+};
+
+THREE.VarNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.out = this.type;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ * @thanks bhouston / https://clara.io/
+ */
+
+THREE.FunctionNode = function ( src, includesOrType, extensionsOrIncludes, keywordsOrExtensions ) {
+
+	src = src || '';
+
+	this.isMethod = typeof includesOrType !== "string";
+	this.useKeywords = true;
+
+	THREE.TempNode.call( this, this.isMethod ? null : includesOrType );
+
+	if ( this.isMethod ) this.eval( src, includesOrType, extensionsOrIncludes, keywordsOrExtensions );
+	else this.eval( src, extensionsOrIncludes, keywordsOrExtensions );
+
+};
+
+THREE.FunctionNode.rDeclaration = /^([a-z_0-9]+)\s([a-z_0-9]+)\s?\((.*?)\)/i;
+THREE.FunctionNode.rProperties = /[a-z_0-9]+/ig;
+
+THREE.FunctionNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.FunctionNode.prototype.constructor = THREE.FunctionNode;
+THREE.FunctionNode.prototype.nodeType = "Function";
+
+THREE.FunctionNode.prototype.isShared = function ( builder, output ) {
+
+	return ! this.isMethod;
+
+};
+
+THREE.FunctionNode.prototype.getType = function ( builder ) {
+
+	return builder.getTypeByFormat( this.type );
+
+};
+
+THREE.FunctionNode.prototype.getInputByName = function ( name ) {
+
+	var i = this.inputs.length;
+
+	while ( i -- ) {
+
+		if ( this.inputs[ i ].name === name )
+			return this.inputs[ i ];
+
+	}
+
+};
+
+THREE.FunctionNode.prototype.getIncludeByName = function ( name ) {
+
+	var i = this.includes.length;
+
+	while ( i -- ) {
+
+		if ( this.includes[ i ].name === name )
+			return this.includes[ i ];
+
+	}
+
+};
+
+THREE.FunctionNode.prototype.generate = function ( builder, output ) {
+
+	var match, offset = 0, src = this.value;
+
+	for ( var i = 0; i < this.includes.length; i ++ ) {
+
+		builder.include( this.includes[ i ], this );
+
+	}
+
+	for ( var ext in this.extensions ) {
+
+		builder.material.extensions[ ext ] = true;
+
+	}
+
+	while ( match = THREE.FunctionNode.rProperties.exec( this.value ) ) {
+
+		var prop = match[ 0 ], isGlobal = this.isMethod ? ! this.getInputByName( prop ) : true;
+		var reference = prop;
+
+		if ( this.keywords[ prop ] || ( this.useKeywords && isGlobal && THREE.NodeLib.containsKeyword( prop ) ) ) {
+
+			var node = this.keywords[ prop ];
+
+			if ( ! node ) {
+
+				var keyword = THREE.NodeLib.getKeywordData( prop );
+
+				if ( keyword.cache ) node = builder.keywords[ prop ];
+
+				node = node || THREE.NodeLib.getKeyword( prop, builder );
+
+				if ( keyword.cache ) builder.keywords[ prop ] = node;
+
+			}
+
+			reference = node.build( builder );
+
+		}
+
+		if ( prop != reference ) {
+
+			src = src.substring( 0, match.index + offset ) + reference + src.substring( match.index + prop.length + offset );
+
+			offset += reference.length - prop.length;
+
+		}
+
+		if ( this.getIncludeByName( reference ) === undefined && THREE.NodeLib.contains( reference ) ) {
+
+			builder.include( THREE.NodeLib.get( reference ) );
+
+		}
+
+	}
+
+	if ( output === 'source' ) {
+
+		return src;
+
+	} else if ( this.isMethod ) {
+
+		builder.include( this, false, src );
+
+		return this.name;
+
+	} else {
+
+		return builder.format( "(" + src + ")", this.getType( builder ), output );
+
+	}
+
+};
+
+THREE.FunctionNode.prototype.eval = function ( src, includes, extensions, keywords ) {
+
+	src = ( src || '' ).trim();
+
+	this.includes = includes || [];
+	this.extensions = extensions || {};
+	this.keywords = keywords || {};
+
+	if ( this.isMethod ) {
+
+		var match = src.match( THREE.FunctionNode.rDeclaration );
+
+		this.inputs = [];
+
+		if ( match && match.length == 4 ) {
+
+			this.type = match[ 1 ];
+			this.name = match[ 2 ];
+
+			var inputs = match[ 3 ].match( THREE.FunctionNode.rProperties );
+
+			if ( inputs ) {
+
+				var i = 0;
+
+				while ( i < inputs.length ) {
+
+					var qualifier = inputs[ i ++ ];
+					var type, name;
+
+					if ( qualifier == 'in' || qualifier == 'out' || qualifier == 'inout' ) {
+
+						type = inputs[ i ++ ];
+
+					} else {
+
+						type = qualifier;
+						qualifier = '';
+
+					}
+
+					name = inputs[ i ++ ];
+
+					this.inputs.push( {
+						name: name,
+						type: type,
+						qualifier: qualifier
+					} );
+
+				}
+
+			}
+
+		} else {
+
+			this.type = '';
+			this.name = '';
+
+		}
+
+	}
+
+	this.value = src;
+
+};
+
+THREE.FunctionNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.src = this.value;
+		data.isMethod = this.isMethod;
+		data.useKeywords = this.useKeywords;
+
+		if ( ! this.isMethod ) data.out = this.type;
+
+		data.extensions = JSON.parse( JSON.stringify( this.extensions ) );
+		data.keywords = {};
+
+		for ( var keyword in this.keywords ) {
+
+			data.keywords[ keyword ] = this.keywords[ keyword ].toJSON( meta ).uuid;
+
+		}
+
+		if ( this.includes.length ) {
+
+			data.includes = [];
+
+			for ( var i = 0; i < this.includes.length; i ++ ) {
+
+				data.includes.push( this.includes[ i ].toJSON( meta ).uuid );
+
+			}
+
+		}
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.FunctionCallNode = function ( func, inputs ) {
+
+	THREE.TempNode.call( this );
+
+	this.setFunction( func, inputs );
+
+};
+
+THREE.FunctionCallNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.FunctionCallNode.prototype.constructor = THREE.FunctionCallNode;
+THREE.FunctionCallNode.prototype.nodeType = "FunctionCall";
+
+THREE.FunctionCallNode.prototype.setFunction = function ( func, inputs ) {
+
+	this.value = func;
+	this.inputs = inputs || [];
+
+};
+
+THREE.FunctionCallNode.prototype.getFunction = function () {
+
+	return this.value;
+
+};
+
+THREE.FunctionCallNode.prototype.getType = function ( builder ) {
+
+	return this.value.getType( builder );
+
+};
+
+THREE.FunctionCallNode.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material;
+
+	var type = this.getType( builder );
+	var func = this.value;
+
+	var code = func.build( builder, output ) + '(';
+	var params = [];
+
+	for ( var i = 0; i < func.inputs.length; i ++ ) {
+
+		var inpt = func.inputs[ i ];
+		var param = this.inputs[ i ] || this.inputs[ inpt.name ];
+
+		params.push( param.build( builder, builder.getTypeByFormat( inpt.type ) ) );
+
+	}
+
+	code += params.join( ',' ) + ')';
+
+	return builder.format( code, type, output );
+
+};
+
+THREE.FunctionCallNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		var func = this.value;
+
+		data = this.createJSONNode( meta );
+
+		data.value = this.value.toJSON( meta ).uuid;
+
+		if ( func.inputs.length ) {
+
+			data.inputs = {};
+
+			for ( var i = 0; i < func.inputs.length; i ++ ) {
+
+				var inpt = func.inputs[ i ];
+				var node = this.inputs[ i ] || this.inputs[ inpt.name ];
+
+				data.inputs[ inpt.name ] = node.toJSON( meta ).uuid;
+
+			}
+
+		}
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.AttributeNode = function ( name, type ) {
+
+	THREE.GLNode.call( this, type );
+
+	this.name = name;
+
+};
+
+THREE.AttributeNode.prototype = Object.create( THREE.GLNode.prototype );
+THREE.AttributeNode.prototype.constructor = THREE.AttributeNode;
+THREE.AttributeNode.prototype.nodeType = "Attribute";
+
+THREE.AttributeNode.prototype.getAttributeType = function ( builder ) {
+
+	return typeof this.type === 'number' ? builder.getConstructorFromLength( this.type ) : this.type;
+
+};
+
+THREE.AttributeNode.prototype.getType = function ( builder ) {
+
+	var type = this.getAttributeType( builder );
+
+	return builder.getTypeByFormat( type );
+
+};
+
+THREE.AttributeNode.prototype.generate = function ( builder, output ) {
+
+	var type = this.getAttributeType( builder );
+
+	var attribute = builder.material.getAttribute( this.name, type );
+
+	return builder.format( builder.isShader( 'vertex' ) ? this.name : attribute.varying.name, this.getType( builder ), output );
+
+};
+
+THREE.AttributeNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.out = this.type;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.NodeBuilder = function ( material ) {
+
+	this.material = material;
+
+	this.caches = [];
+	this.slots = [];
+
+	this.keywords = {};
+
+	this.parsing = false;
+	this.optimize = true;
+
+	this.update();
+
+};
+
+THREE.NodeBuilder.type = {
+	float: 'fv1',
+	vec2: 'v2',
+	vec3: 'v3',
+	vec4: 'v4',
+	mat4: 'v4',
+	int: 'iv1'
+};
+
+THREE.NodeBuilder.constructors = [
+	'float',
+	'vec2',
+	'vec3',
+	'vec4'
+];
+
+THREE.NodeBuilder.elements = [
+	'x',
+	'y',
+	'z',
+	'w'
+];
+
+THREE.NodeBuilder.prototype = {
+
+	constructor: THREE.NodeBuilder,
+
+	addCache: function ( name, requires ) {
+
+		this.caches.push( {
+			name: name || '',
+			requires: requires || {}
+		} );
+
+		return this.update();
+
+	},
+
+	removeCache: function () {
+
+		this.caches.pop();
+
+		return this.update();
+
+	},
+
+	addSlot: function ( name ) {
+
+		this.slots.push( {
+			name: name || ''
+		} );
+
+		return this.update();
+
+	},
+
+	removeSlot: function () {
+
+		this.slots.pop();
+
+		return this.update();
+
+	},
+
+	isCache: function ( name ) {
+
+		var i = this.caches.length;
+
+		while ( i -- ) {
+
+			if ( this.caches[ i ].name == name ) return true;
+
+		}
+
+		return false;
+
+	},
+
+	isSlot: function ( name ) {
+
+		var i = this.slots.length;
+
+		while ( i -- ) {
+
+			if ( this.slots[ i ].name == name ) return true;
+
+		}
+
+		return false;
+
+	},
+
+	update: function () {
+
+		var cache = this.caches[ this.caches.length - 1 ];
+		var slot = this.slots[ this.slots.length - 1 ];
+
+		this.slot = slot ? slot.name : '';
+		this.cache = cache ? cache.name : '';
+		this.requires = cache ? cache.requires : {};
+
+		return this;
+
+	},
+
+	require: function ( name, node ) {
+
+		this.requires[ name ] = node;
+
+		return this;
+
+	},
+
+	include: function ( node, parent, source ) {
+
+		this.material.include( this, node, parent, source );
+
+		return this;
+
+	},
+
+	colorToVector: function ( color ) {
+
+		return color.replace( 'r', 'x' ).replace( 'g', 'y' ).replace( 'b', 'z' ).replace( 'a', 'w' );
+
+	},
+
+	getConstructorFromLength: function ( len ) {
+
+		return THREE.NodeBuilder.constructors[ len - 1 ];
+
+	},
+
+	getFormatName: function ( format ) {
+
+		return format.replace( /c/g, 'v3' ).replace( /fv1/g, 'v1' ).replace( /iv1/g, 'i' );
+
+	},
+
+	isFormatMatrix: function ( format ) {
+
+		return /^m/.test( format );
+
+	},
+
+	getFormatLength: function ( format ) {
+
+		return parseInt( this.getFormatName( format ).substr( 1 ) );
+
+	},
+
+	getFormatFromLength: function ( len ) {
+
+		if ( len == 1 ) return 'fv1';
+
+		return 'v' + len;
+
+	},
+
+	format: function ( code, from, to ) {
+
+		var format = this.getFormatName( to + '=' + from );
+
+		switch ( format ) {
+
+			case 'v1=v2': return code + '.x';
+			case 'v1=v3': return code + '.x';
+			case 'v1=v4': return code + '.x';
+			case 'v1=i': return 'float(' + code + ')';
+
+			case 'v2=v1': return 'vec2(' + code + ')';
+			case 'v2=v3': return code + '.xy';
+			case 'v2=v4': return code + '.xy';
+			case 'v2=i': return 'vec2(float(' + code + '))';
+
+			case 'v3=v1': return 'vec3(' + code + ')';
+			case 'v3=v2': return 'vec3(' + code + ',0.0)';
+			case 'v3=v4': return code + '.xyz';
+			case 'v3=i': return 'vec2(float(' + code + '))';
+
+			case 'v4=v1': return 'vec4(' + code + ')';
+			case 'v4=v2': return 'vec4(' + code + ',0.0,1.0)';
+			case 'v4=v3': return 'vec4(' + code + ',1.0)';
+			case 'v4=i': return 'vec4(float(' + code + '))';
+
+			case 'i=v1': return 'int(' + code + ')';
+			case 'i=v2': return 'int(' + code + '.x)';
+			case 'i=v3': return 'int(' + code + '.x)';
+			case 'i=v4': return 'int(' + code + '.x)';
+
+		}
+
+		return code;
+
+	},
+
+	getTypeByFormat: function ( format ) {
+
+		return THREE.NodeBuilder.type[ format ] || format;
+
+	},
+
+	getUuid: function ( uuid, useCache ) {
+
+		useCache = useCache !== undefined ? useCache : true;
+
+		if ( useCache && this.cache ) uuid = this.cache + '-' + uuid;
+
+		return uuid;
+
+	},
+
+	getElementByIndex: function ( index ) {
+
+		return THREE.NodeBuilder.elements[ index ];
+
+	},
+
+	getIndexByElement: function ( elm ) {
+
+		return THREE.NodeBuilder.elements.indexOf( elm );
+
+	},
+
+	isShader: function ( shader ) {
+
+		return this.shader == shader;
+
+	},
+
+	setShader: function ( shader ) {
+
+		this.shader = shader;
+
+		return this;
+
+	}
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.NodeLib = {
+
+	nodes: {},
+	keywords: {},
+
+	add: function ( node ) {
+
+		this.nodes[ node.name ] = node;
+
+	},
+
+	addKeyword: function ( name, callback, cache ) {
+
+		cache = cache !== undefined ? cache : true;
+
+		this.keywords[ name ] = { callback: callback, cache: cache };
+
+	},
+
+	remove: function ( node ) {
+
+		delete this.nodes[ node.name ];
+
+	},
+
+	removeKeyword: function ( name ) {
+
+		delete this.keywords[ name ];
+
+	},
+
+	get: function ( name ) {
+
+		return this.nodes[ name ];
+
+	},
+
+	getKeyword: function ( name, material ) {
+
+		return this.keywords[ name ].callback.call( this, material );
+
+	},
+
+	getKeywordData: function ( name ) {
+
+		return this.keywords[ name ];
+
+	},
+
+	contains: function ( name ) {
+
+		return this.nodes[ name ] != undefined;
+
+	},
+
+	containsKeyword: function ( name ) {
+
+		return this.keywords[ name ] != undefined;
+
+	}
+
+};
+
+//
+//	Keywords
+//
+
+THREE.NodeLib.addKeyword( 'uv', function () {
+
+	return new THREE.UVNode();
+
+} );
+
+THREE.NodeLib.addKeyword( 'uv2', function () {
+
+	return new THREE.UVNode( 1 );
+
+} );
+
+THREE.NodeLib.addKeyword( 'position', function () {
+
+	return new THREE.PositionNode();
+
+} );
+
+THREE.NodeLib.addKeyword( 'worldPosition', function () {
+
+	return new THREE.PositionNode( THREE.PositionNode.WORLD );
+
+} );
+
+THREE.NodeLib.addKeyword( 'normal', function () {
+
+	return new THREE.NormalNode();
+
+} );
+
+THREE.NodeLib.addKeyword( 'worldNormal', function () {
+
+	return new THREE.NormalNode( THREE.NormalNode.WORLD );
+
+} );
+
+THREE.NodeLib.addKeyword( 'viewPosition', function () {
+
+	return new THREE.PositionNode( THREE.NormalNode.VIEW );
+
+} );
+
+THREE.NodeLib.addKeyword( 'viewNormal', function () {
+
+	return new THREE.NormalNode( THREE.NormalNode.VIEW );
+
+} );
+
+THREE.NodeLib.addKeyword( 'time', function () {
+
+	return new THREE.TimerNode();
+
+} );
+
+//
+//	Luma
+//
+
+THREE.NodeLib.add( new THREE.ConstNode( "vec3 LUMA vec3(0.2125, 0.7154, 0.0721)" ) );
+
+//
+//	NormalMap
+//
+
+THREE.NodeLib.add( new THREE.FunctionNode( [
+// Per-Pixel Tangent Space Normal Mapping
+// http://hacksoflife.blogspot.ch/2009/11/per-pixel-tangent-space-normal-mapping.html
+	"vec3 perturbNormal2Arb( vec3 eye_pos, vec3 surf_norm, vec3 map, vec2 mUv, vec2 scale ) {",
+	"	vec3 q0 = dFdx( eye_pos );",
+	"	vec3 q1 = dFdy( eye_pos );",
+	"	vec2 st0 = dFdx( mUv.st );",
+	"	vec2 st1 = dFdy( mUv.st );",
+	"	vec3 S = normalize( q0 * st1.t - q1 * st0.t );",
+	"	vec3 T = normalize( -q0 * st1.s + q1 * st0.s );",
+	"	vec3 N = normalize( surf_norm );",
+	"	vec3 mapN = map * 2.0 - 1.0;",
+	"	mapN.xy = scale * mapN.xy;",
+	"	mat3 tsn = mat3( S, T, N );",
+	"	return normalize( tsn * mapN );",
+	"}"
+].join( "\n" ), null, { derivatives: true } ) );
+
+//
+//	Noise
+//
+
+THREE.NodeLib.add( new THREE.FunctionNode( [
+	"float snoise(vec2 co) {",
+	"	return fract( sin( dot(co.xy, vec2(12.9898,78.233) ) ) * 43758.5453 );",
+	"}"
+].join( "\n" ) ) );
+
+//
+//	Hue
+//
+
+THREE.NodeLib.add( new THREE.FunctionNode( [
+	"vec3 hue_rgb(vec3 rgb, float adjustment) {",
+	"	const mat3 RGBtoYIQ = mat3(0.299, 0.587, 0.114, 0.595716, -0.274453, -0.321263, 0.211456, -0.522591, 0.311135);",
+	"	const mat3 YIQtoRGB = mat3(1.0, 0.9563, 0.6210, 1.0, -0.2721, -0.6474, 1.0, -1.107, 1.7046);",
+	"	vec3 yiq = RGBtoYIQ * rgb;",
+	"	float hue = atan(yiq.z, yiq.y) + adjustment;",
+	"	float chroma = sqrt(yiq.z * yiq.z + yiq.y * yiq.y);",
+	"	return YIQtoRGB * vec3(yiq.x, chroma * cos(hue), chroma * sin(hue));",
+	"}"
+].join( "\n" ) ) );
+
+//
+//	Saturation
+//
+
+THREE.NodeLib.add( new THREE.FunctionNode( [
+// Algorithm from Chapter 16 of OpenGL Shading Language
+	"vec3 saturation_rgb(vec3 rgb, float adjustment) {",
+	"	vec3 intensity = vec3(dot(rgb, LUMA));",
+	"	return mix(intensity, rgb, adjustment);",
+	"}"
+].join( "\n" ) ) );
+
+//
+//	Luminance
+//
+
+THREE.NodeLib.add( new THREE.FunctionNode( [
+// Algorithm from Chapter 10 of Graphics Shaders
+	"float luminance_rgb(vec3 rgb) {",
+	"	return dot(rgb, LUMA);",
+	"}"
+].join( "\n" ) ) );
+
+//
+//	Vibrance
+//
+
+THREE.NodeLib.add( new THREE.FunctionNode( [
+// Shader by Evan Wallace adapted by @lo-th
+	"vec3 vibrance_rgb(vec3 rgb, float adjustment) {",
+	"	float average = (rgb.r + rgb.g + rgb.b) / 3.0;",
+	"	float mx = max(rgb.r, max(rgb.g, rgb.b));",
+	"	float amt = (mx - average) * (-3.0 * adjustment);",
+	"	return mix(rgb.rgb, vec3(mx), amt);",
+	"}"
+].join( "\n" ) ) );
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.NodeFrame = function ( time ) {
+
+	this.time = time !== undefined ? time : 0;
+
+	this.frameId = 0;
+
+};
+
+THREE.NodeFrame.prototype.update = function ( delta ) {
+
+	++this.frameId;
+
+	this.time += delta;
+	this.delta = delta;
+
+	return this;
+
+};
+
+THREE.NodeFrame.prototype.updateNode = function ( node ) {
+
+	if ( node.frameId === this.frameId ) return this;
+
+	node.updateFrame( this );
+
+	node.frameId = this.frameId;
+
+	return this;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.NodeMaterial = function ( vertex, fragment ) {
+
+	THREE.ShaderMaterial.call( this );
+
+	this.vertex = vertex || new THREE.RawNode( new THREE.PositionNode( THREE.PositionNode.PROJECTION ) );
+	this.fragment = fragment || new THREE.RawNode( new THREE.ColorNode( 0xFF0000 ) );
+
+	this.updaters = [];
+
+};
+
+THREE.NodeMaterial.types = {
+	t: 'sampler2D',
+	tc: 'samplerCube',
+	bv1: 'bool',
+	iv1: 'int',
+	fv1: 'float',
+	c: 'vec3',
+	v2: 'vec2',
+	v3: 'vec3',
+	v4: 'vec4',
+	m3: 'mat3',
+	m4: 'mat4'
+};
+
+THREE.NodeMaterial.addShortcuts = function ( proto, prop, list ) {
+
+	function applyShortcut( prop, name ) {
+
+		return {
+			get: function () {
+
+				return this[ prop ][ name ];
+
+			},
+			set: function ( val ) {
+
+				this[ prop ][ name ] = val;
+
+			}
+		};
+
+	}
+
+	return ( function () {
+
+		var shortcuts = {};
+
+		for ( var i = 0; i < list.length; ++ i ) {
+
+			var name = list[ i ];
+
+			shortcuts[ name ] = applyShortcut( prop, name );
+
+		}
+
+		Object.defineProperties( proto, shortcuts );
+
+	} )();
+
+};
+
+THREE.NodeMaterial.prototype = Object.create( THREE.ShaderMaterial.prototype );
+THREE.NodeMaterial.prototype.constructor = THREE.NodeMaterial;
+THREE.NodeMaterial.prototype.type = "NodeMaterial";
+
+THREE.NodeMaterial.prototype.updateFrame = function ( frame ) {
+
+	for ( var i = 0; i < this.updaters.length; ++ i ) {
+
+		frame.updateNode( this.updaters[ i ] );
+
+	}
+
+};
+
+THREE.NodeMaterial.prototype.build = function () {
+
+	var vertex, fragment;
+
+	this.nodes = [];
+
+	this.defines = {};
+	this.uniforms = {};
+	this.attributes = {};
+
+	this.extensions = {};
+
+	this.nodeData = {};
+
+	this.vertexUniform = [];
+	this.fragmentUniform = [];
+
+	this.vars = [];
+	this.vertexTemps = [];
+	this.fragmentTemps = [];
+
+	this.uniformList = [];
+
+	this.consts = [];
+	this.functions = [];
+
+	this.updaters = [];
+
+	this.requires = {
+		uv: [],
+		color: [],
+		lights: this.lights,
+		fog: this.fog
+	};
+
+	this.vertexPars = '';
+	this.fragmentPars = '';
+
+	this.vertexCode = '';
+	this.fragmentCode = '';
+
+	this.vertexNode = '';
+	this.fragmentNode = '';
+
+	this.prefixCode = [
+		"#ifdef GL_EXT_shader_texture_lod",
+
+		"	#define texCube(a, b) textureCube(a, b)",
+		"	#define texCubeBias(a, b, c) textureCubeLodEXT(a, b, c)",
+
+		"	#define tex2D(a, b) texture2D(a, b)",
+		"	#define tex2DBias(a, b, c) texture2DLodEXT(a, b, c)",
+
+		"#else",
+
+		"	#define texCube(a, b) textureCube(a, b)",
+		"	#define texCubeBias(a, b, c) textureCube(a, b, c)",
+
+		"	#define tex2D(a, b) texture2D(a, b)",
+		"	#define tex2DBias(a, b, c) texture2D(a, b, c)",
+
+		"#endif",
+
+		"#include <packing>"
+
+	].join( "\n" );
+
+	var builder = new THREE.NodeBuilder( this );
+
+	vertex = this.vertex.build( builder.setShader( 'vertex' ), 'v4' );
+	fragment = this.fragment.build( builder.setShader( 'fragment' ), 'v4' );
+
+	if ( this.requires.uv[ 0 ] ) {
+
+		this.addVertexPars( 'varying vec2 vUv;' );
+		this.addFragmentPars( 'varying vec2 vUv;' );
+
+		this.addVertexCode( 'vUv = uv;' );
+
+	}
+
+	if ( this.requires.uv[ 1 ] ) {
+
+		this.addVertexPars( 'varying vec2 vUv2; attribute vec2 uv2;' );
+		this.addFragmentPars( 'varying vec2 vUv2;' );
+
+		this.addVertexCode( 'vUv2 = uv2;' );
+
+	}
+
+	if ( this.requires.color[ 0 ] ) {
+
+		this.addVertexPars( 'varying vec4 vColor; attribute vec4 color;' );
+		this.addFragmentPars( 'varying vec4 vColor;' );
+
+		this.addVertexCode( 'vColor = color;' );
+
+	}
+
+	if ( this.requires.color[ 1 ] ) {
+
+		this.addVertexPars( 'varying vec4 vColor2; attribute vec4 color2;' );
+		this.addFragmentPars( 'varying vec4 vColor2;' );
+
+		this.addVertexCode( 'vColor2 = color2;' );
+
+	}
+
+	if ( this.requires.position ) {
+
+		this.addVertexPars( 'varying vec3 vPosition;' );
+		this.addFragmentPars( 'varying vec3 vPosition;' );
+
+		this.addVertexCode( 'vPosition = transformed;' );
+
+	}
+
+	if ( this.requires.worldPosition ) {
+
+		this.addVertexPars( 'varying vec3 vWPosition;' );
+		this.addFragmentPars( 'varying vec3 vWPosition;' );
+
+		this.addVertexCode( 'vWPosition = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;' );
+
+	}
+
+	if ( this.requires.normal ) {
+
+		this.addVertexPars( 'varying vec3 vObjectNormal;' );
+		this.addFragmentPars( 'varying vec3 vObjectNormal;' );
+
+		this.addVertexCode( 'vObjectNormal = normal;' );
+
+	}
+
+	if ( this.requires.worldNormal ) {
+
+		this.addVertexPars( 'varying vec3 vWNormal;' );
+		this.addFragmentPars( 'varying vec3 vWNormal;' );
+
+		this.addVertexCode( 'vWNormal = ( modelMatrix * vec4( objectNormal, 0.0 ) ).xyz;' );
+
+	}
+
+	this.fog = this.requires.fog;
+	this.lights = this.requires.lights;
+
+	this.transparent = this.requires.transparent || this.blending > THREE.NormalBlending;
+
+	this.vertexShader = [
+		this.prefixCode,
+		this.vertexPars,
+		this.getCodePars( this.vertexUniform, 'uniform' ),
+		this.getIncludes( this.consts[ 'vertex' ] ),
+		this.getIncludes( this.functions[ 'vertex' ] ),
+		'void main(){',
+		this.getCodePars( this.vertexTemps ),
+		vertex,
+		this.vertexCode,
+		'}'
+	].join( "\n" );
+
+	this.fragmentShader = [
+		this.prefixCode,
+		this.fragmentPars,
+		this.getCodePars( this.fragmentUniform, 'uniform' ),
+		this.getIncludes( this.consts[ 'fragment' ] ),
+		this.getIncludes( this.functions[ 'fragment' ] ),
+		'void main(){',
+		this.getCodePars( this.fragmentTemps ),
+		this.fragmentCode,
+		fragment,
+		'}'
+	].join( "\n" );
+
+	this.needsUpdate = true;
+	this.dispose(); // force update
+
+	return this;
+
+};
+
+THREE.NodeMaterial.prototype.define = function ( name, value ) {
+
+	this.defines[ name ] = value == undefined ? 1 : value;
+
+};
+
+THREE.NodeMaterial.prototype.isDefined = function ( name ) {
+
+	return this.defines[ name ] != undefined;
+
+};
+
+THREE.NodeMaterial.prototype.mergeUniform = function ( uniforms ) {
+
+	for ( var name in uniforms ) {
+
+		this.uniforms[ name ] = uniforms[ name ];
+
+	}
+
+};
+
+THREE.NodeMaterial.prototype.createUniform = function ( type, value, ns, needsUpdate ) {
+
+	var index = this.uniformList.length;
+
+	var uniform = {
+		type: type,
+		value: value,
+		name: ns ? ns : 'nVu' + index,
+		needsUpdate: needsUpdate
+	};
+
+	this.uniformList.push( uniform );
+
+	return uniform;
+
+};
+
+THREE.NodeMaterial.prototype.getVertexTemp = function ( uuid, type, ns ) {
+
+	var data = this.vertexTemps[ uuid ];
+
+	if ( ! data ) {
+
+		var index = this.vertexTemps.length,
+			name = ns ? ns : 'nVt' + index;
+
+		data = { name: name, type: type };
+
+		this.vertexTemps.push( data );
+		this.vertexTemps[ uuid ] = data;
+
+	}
+
+	return data;
+
+};
+
+THREE.NodeMaterial.prototype.getFragmentTemp = function ( uuid, type, ns ) {
+
+	var data = this.fragmentTemps[ uuid ];
+
+	if ( ! data ) {
+
+		var index = this.fragmentTemps.length,
+			name = ns ? ns : 'nVt' + index;
+
+		data = { name: name, type: type };
+
+		this.fragmentTemps.push( data );
+		this.fragmentTemps[ uuid ] = data;
+
+	}
+
+	return data;
+
+};
+
+THREE.NodeMaterial.prototype.getVar = function ( uuid, type, ns ) {
+
+	var data = this.vars[ uuid ];
+
+	if ( ! data ) {
+
+		var index = this.vars.length,
+			name = ns ? ns : 'nVv' + index;
+
+		data = { name: name, type: type };
+
+		this.vars.push( data );
+		this.vars[ uuid ] = data;
+
+		this.addVertexPars( 'varying ' + type + ' ' + name + ';' );
+		this.addFragmentPars( 'varying ' + type + ' ' + name + ';' );
+
+	}
+
+	return data;
+
+};
+
+THREE.NodeMaterial.prototype.getAttribute = function ( name, type ) {
+
+	if ( ! this.attributes[ name ] ) {
+
+		var varying = this.getVar( name, type );
+
+		this.addVertexPars( 'attribute ' + type + ' ' + name + ';' );
+		this.addVertexCode( varying.name + ' = ' + name + ';' );
+
+		this.attributes[ name ] = { varying: varying, name: name, type: type };
+
+	}
+
+	return this.attributes[ name ];
+
+};
+
+THREE.NodeMaterial.prototype.getIncludes = function () {
+
+	function sortByPosition( a, b ) {
+
+		return a.deps.length - b.deps.length;
+
+	}
+
+	return function ( incs ) {
+
+		if ( ! incs ) return '';
+
+		var code = '', incs = incs.sort( sortByPosition );
+
+		for ( var i = 0; i < incs.length; i ++ ) {
+
+			if ( incs[ i ].src ) code += incs[ i ].src + '\n';
+
+		}
+
+		return code;
+
+	};
+
+}();
+
+THREE.NodeMaterial.prototype.addVertexPars = function ( code ) {
+
+	this.vertexPars += code + '\n';
+
+};
+
+THREE.NodeMaterial.prototype.addFragmentPars = function ( code ) {
+
+	this.fragmentPars += code + '\n';
+
+};
+
+THREE.NodeMaterial.prototype.addVertexCode = function ( code ) {
+
+	this.vertexCode += code + '\n';
+
+};
+
+THREE.NodeMaterial.prototype.addFragmentCode = function ( code ) {
+
+	this.fragmentCode += code + '\n';
+
+};
+
+THREE.NodeMaterial.prototype.addVertexNode = function ( code ) {
+
+	this.vertexNode += code + '\n';
+
+};
+
+THREE.NodeMaterial.prototype.clearVertexNode = function () {
+
+	var code = this.vertexNode;
+
+	this.vertexNode = '';
+
+	return code;
+
+};
+
+THREE.NodeMaterial.prototype.addFragmentNode = function ( code ) {
+
+	this.fragmentNode += code + '\n';
+
+};
+
+THREE.NodeMaterial.prototype.clearFragmentNode = function () {
+
+	var code = this.fragmentNode;
+
+	this.fragmentNode = '';
+
+	return code;
+
+};
+
+THREE.NodeMaterial.prototype.getCodePars = function ( pars, prefix ) {
+
+	prefix = prefix || '';
+
+	var code = '';
+
+	for ( var i = 0, l = pars.length; i < l; ++ i ) {
+
+		var parsType = pars[ i ].type;
+		var parsName = pars[ i ].name;
+		var parsValue = pars[ i ].value;
+
+		if ( parsType == 't' && parsValue instanceof THREE.CubeTexture ) parsType = 'tc';
+
+		var type = THREE.NodeMaterial.types[ parsType ];
+
+		if ( type == undefined ) throw new Error( "Node pars " + parsType + " not found." );
+
+		code += prefix + ' ' + type + ' ' + parsName + ';\n';
+
+	}
+
+	return code;
+
+};
+
+THREE.NodeMaterial.prototype.createVertexUniform = function ( type, value, ns, needsUpdate ) {
+
+	var uniform = this.createUniform( type, value, ns, needsUpdate );
+
+	this.vertexUniform.push( uniform );
+	this.vertexUniform[ uniform.name ] = uniform;
+
+	this.uniforms[ uniform.name ] = uniform;
+
+	return uniform;
+
+};
+
+THREE.NodeMaterial.prototype.createFragmentUniform = function ( type, value, ns, needsUpdate ) {
+
+	var uniform = this.createUniform( type, value, ns, needsUpdate );
+
+	this.fragmentUniform.push( uniform );
+	this.fragmentUniform[ uniform.name ] = uniform;
+
+	this.uniforms[ uniform.name ] = uniform;
+
+	return uniform;
+
+};
+
+THREE.NodeMaterial.prototype.getDataNode = function ( uuid ) {
+
+	return this.nodeData[ uuid ] = this.nodeData[ uuid ] || {};
+
+};
+
+THREE.NodeMaterial.prototype.include = function ( builder, node, parent, source ) {
+
+	var includes;
+
+	node = typeof node === 'string' ? THREE.NodeLib.get( node ) : node;
+
+	if ( node instanceof THREE.FunctionNode ) {
+
+		includes = this.functions[ builder.shader ] = this.functions[ builder.shader ] || [];
+
+	} else if ( node instanceof THREE.ConstNode ) {
+
+		includes = this.consts[ builder.shader ] = this.consts[ builder.shader ] || [];
+
+	}
+
+	var included = includes[ node.name ];
+
+	if ( ! included ) {
+
+		included = includes[ node.name ] = {
+			node: node,
+			deps: []
+		};
+
+		includes.push( included );
+
+		included.src = node.build( builder, 'source' );
+
+	}
+
+	if ( node instanceof THREE.FunctionNode && parent && includes[ parent.name ] && includes[ parent.name ].deps.indexOf( node ) == - 1 ) {
+
+		includes[ parent.name ].deps.push( node );
+
+		if ( node.includes && node.includes.length ) {
+
+			var i = 0;
+
+			do {
+
+				this.include( builder, node.includes[ i ++ ], parent );
+
+			} while ( i < node.includes.length );
+
+		}
+
+	}
+
+	if ( source ) {
+
+		included.src = source;
+
+	}
+
+};
+
+THREE.NodeMaterial.prototype.toJSON = function ( meta ) {
+
+	var isRootObject = ( meta === undefined || typeof meta === 'string' );
+
+	if ( isRootObject ) {
+
+		meta = {
+			nodes: {}
+		};
+
+	}
+
+	if ( meta && ! meta.materials ) meta.materials = {};
+
+	if ( ! meta.materials[ this.uuid ] ) {
+
+		var data = {};
+
+		data.uuid = this.uuid;
+		data.type = this.type;
+
+		meta.materials[ data.uuid ] = data;
+
+		if ( this.name !== "" ) data.name = this.name;
+
+		if ( this.blending !== THREE.NormalBlending ) data.blending = this.blending;
+		if ( this.flatShading === true ) data.flatShading = this.flatShading;
+		if ( this.side !== THREE.FrontSide ) data.side = this.side;
+
+		if ( this.transparent === true ) data.transparent = this.transparent;
+
+		data.depthFunc = this.depthFunc;
+		data.depthTest = this.depthTest;
+		data.depthWrite = this.depthWrite;
+
+		if ( this.wireframe === true ) data.wireframe = this.wireframe;
+		if ( this.wireframeLinewidth > 1 ) data.wireframeLinewidth = this.wireframeLinewidth;
+		if ( this.wireframeLinecap !== 'round' ) data.wireframeLinecap = this.wireframeLinecap;
+		if ( this.wireframeLinejoin !== 'round' ) data.wireframeLinejoin = this.wireframeLinejoin;
+
+		if ( this.morphTargets === true ) data.morphTargets = true;
+		if ( this.skinning === true ) data.skinning = true;
+
+		data.fog = this.fog;
+		data.lights = this.lights;
+
+		if ( this.visible === false ) data.visible = false;
+		if ( JSON.stringify( this.userData ) !== '{}' ) data.userData = this.userData;
+
+		data.vertex = this.vertex.toJSON( meta ).uuid;
+		data.fragment = this.fragment.toJSON( meta ).uuid;
+
+	}
+
+	meta.material = this.uuid;
+
+	return meta;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.PositionNode = function ( scope ) {
+
+	THREE.TempNode.call( this, 'v3' );
+
+	this.scope = scope || THREE.PositionNode.LOCAL;
+
+};
+
+THREE.PositionNode.LOCAL = 'local';
+THREE.PositionNode.WORLD = 'world';
+THREE.PositionNode.VIEW = 'view';
+THREE.PositionNode.PROJECTION = 'projection';
+
+THREE.PositionNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.PositionNode.prototype.constructor = THREE.PositionNode;
+THREE.PositionNode.prototype.nodeType = "Position";
+
+THREE.PositionNode.prototype.getType = function ( builder ) {
+
+	switch ( this.scope ) {
+
+		case THREE.PositionNode.PROJECTION:
+			return 'v4';
+
+	}
+
+	return this.type;
+
+};
+
+THREE.PositionNode.prototype.isShared = function ( builder ) {
+
+	switch ( this.scope ) {
+
+		case THREE.PositionNode.LOCAL:
+		case THREE.PositionNode.WORLD:
+			return false;
+
+	}
+
+	return true;
+
+};
+
+THREE.PositionNode.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material;
+	var result;
+
+	switch ( this.scope ) {
+
+		case THREE.PositionNode.LOCAL:
+
+			material.requires.position = true;
+
+			if ( builder.isShader( 'vertex' ) ) result = 'transformed';
+			else result = 'vPosition';
+
+			break;
+
+		case THREE.PositionNode.WORLD:
+
+			material.requires.worldPosition = true;
+
+			if ( builder.isShader( 'vertex' ) ) result = 'vWPosition';
+			else result = 'vWPosition';
+
+			break;
+
+		case THREE.PositionNode.VIEW:
+
+			if ( builder.isShader( 'vertex' ) ) result = '-mvPosition.xyz';
+			else result = 'vViewPosition';
+
+			break;
+
+		case THREE.PositionNode.PROJECTION:
+
+			if ( builder.isShader( 'vertex' ) ) result = '(projectionMatrix * modelViewMatrix * vec4( position, 1.0 ))';
+			else result = 'vec4( 0.0 )';
+
+			break;
+
+	}
+
+	return builder.format( result, this.getType( builder ), output );
+
+};
+
+THREE.PositionNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.scope = this.scope;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.NormalNode = function ( scope ) {
+
+	THREE.TempNode.call( this, 'v3' );
+
+	this.scope = scope || THREE.NormalNode.LOCAL;
+
+};
+
+THREE.NormalNode.LOCAL = 'local';
+THREE.NormalNode.WORLD = 'world';
+THREE.NormalNode.VIEW = 'view';
+
+THREE.NormalNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.NormalNode.prototype.constructor = THREE.NormalNode;
+THREE.NormalNode.prototype.nodeType = "Normal";
+
+THREE.NormalNode.prototype.isShared = function ( builder ) {
+
+	switch ( this.scope ) {
+
+		case THREE.NormalNode.WORLD:
+			return true;
+
+	}
+
+	return false;
+
+};
+
+THREE.NormalNode.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material;
+	var result;
+
+	switch ( this.scope ) {
+
+		case THREE.NormalNode.LOCAL:
+
+			material.requires.normal = true;
+
+			if ( builder.isShader( 'vertex' ) ) result = 'normal';
+			else result = 'vObjectNormal';
+
+			break;
+
+		case THREE.NormalNode.WORLD:
+
+			material.requires.worldNormal = true;
+
+			if ( builder.isShader( 'vertex' ) ) result = '( modelMatrix * vec4( objectNormal, 0.0 ) ).xyz';
+			else result = 'vWNormal';
+
+			break;
+
+		case THREE.NormalNode.VIEW:
+
+			result = 'vNormal';
+
+			break;
+
+	}
+
+	return builder.format( result, this.getType( builder ), output );
+
+};
+
+THREE.NormalNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.scope = this.scope;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.UVNode = function ( index ) {
+
+	THREE.TempNode.call( this, 'v2', { shared: false } );
+
+	this.index = index || 0;
+
+};
+
+THREE.UVNode.vertexDict = [ 'uv', 'uv2' ];
+THREE.UVNode.fragmentDict = [ 'vUv', 'vUv2' ];
+
+THREE.UVNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.UVNode.prototype.constructor = THREE.UVNode;
+THREE.UVNode.prototype.nodeType = "UV";
+
+THREE.UVNode.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material;
+	var result;
+
+	material.requires.uv[ this.index ] = true;
+
+	if ( builder.isShader( 'vertex' ) ) result = THREE.UVNode.vertexDict[ this.index ];
+	else result = THREE.UVNode.fragmentDict[ this.index ];
+
+	return builder.format( result, this.getType( builder ), output );
+
+};
+
+THREE.UVNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.index = this.index;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.ScreenUVNode = function ( resolution ) {
+
+	THREE.TempNode.call( this, 'v2' );
+
+	this.resolution = resolution;
+
+};
+
+THREE.ScreenUVNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.ScreenUVNode.prototype.constructor = THREE.ScreenUVNode;
+THREE.ScreenUVNode.prototype.nodeType = "ScreenUV";
+
+THREE.ScreenUVNode.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material;
+	var result;
+
+	if ( builder.isShader( 'fragment' ) ) {
+
+		result = '(gl_FragCoord.xy/' + this.resolution.build( builder, 'v2' ) + ')';
+
+	} else {
+
+		console.warn( "THREE.ScreenUVNode is not compatible with " + builder.shader + " shader." );
+
+		result = 'vec2( 0.0 )';
+
+	}
+
+	return builder.format( result, this.getType( builder ), output );
+
+};
+
+THREE.ScreenUVNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.resolution = this.resolution.toJSON( meta ).uuid;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.ColorsNode = function ( index ) {
+
+	THREE.TempNode.call( this, 'v4', { shared: false } );
+
+	this.index = index || 0;
+
+};
+
+THREE.ColorsNode.vertexDict = [ 'color', 'color2' ];
+THREE.ColorsNode.fragmentDict = [ 'vColor', 'vColor2' ];
+
+THREE.ColorsNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.ColorsNode.prototype.constructor = THREE.ColorsNode;
+
+THREE.ColorsNode.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material;
+	var result;
+
+	material.requires.color[ this.index ] = true;
+
+	if ( builder.isShader( 'vertex' ) ) result = THREE.ColorsNode.vertexDict[ this.index ];
+	else result = THREE.ColorsNode.fragmentDict[ this.index ];
+
+	return builder.format( result, this.getType( builder ), output );
+
+};
+
+THREE.ColorsNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.index = this.index;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.CameraNode = function ( scope, camera ) {
+
+	THREE.TempNode.call( this, 'v3' );
+
+	this.setScope( scope || THREE.CameraNode.POSITION );
+	this.setCamera( camera );
+
+};
+
+THREE.CameraNode.fDepthColor = new THREE.FunctionNode( [
+	"float depthColor( float mNear, float mFar ) {",
+	"	#ifdef USE_LOGDEPTHBUF_EXT",
+	"		float depth = gl_FragDepthEXT / gl_FragCoord.w;",
+	"	#else",
+	"		float depth = gl_FragCoord.z / gl_FragCoord.w;",
+	"	#endif",
+	"	return 1.0 - smoothstep( mNear, mFar, depth );",
+	"}"
+].join( "\n" ) );
+
+THREE.CameraNode.POSITION = 'position';
+THREE.CameraNode.DEPTH = 'depth';
+THREE.CameraNode.TO_VERTEX = 'toVertex';
+
+THREE.CameraNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.CameraNode.prototype.constructor = THREE.CameraNode;
+THREE.CameraNode.prototype.nodeType = "Camera";
+
+THREE.CameraNode.prototype.setCamera = function ( camera ) {
+
+	this.camera = camera;
+	this.updateFrame = camera !== undefined ? this.onUpdateFrame : undefined;
+
+};
+
+THREE.CameraNode.prototype.setScope = function ( scope ) {
+
+	switch ( this.scope ) {
+
+		case THREE.CameraNode.DEPTH:
+
+			delete this.near;
+			delete this.far;
+
+			break;
+
+	}
+
+	this.scope = scope;
+
+	switch ( scope ) {
+
+		case THREE.CameraNode.DEPTH:
+
+			var camera = this.camera;
+
+			this.near = new THREE.FloatNode( camera ? camera.near : 1 );
+			this.far = new THREE.FloatNode( camera ? camera.far : 1200 );
+
+			break;
+
+	}
+
+};
+
+THREE.CameraNode.prototype.getType = function ( builder ) {
+
+	switch ( this.scope ) {
+
+		case THREE.CameraNode.DEPTH:
+			return 'fv1';
+
+	}
+
+	return this.type;
+
+};
+
+THREE.CameraNode.prototype.isUnique = function ( builder ) {
+
+	switch ( this.scope ) {
+
+		case THREE.CameraNode.DEPTH:
+		case THREE.CameraNode.TO_VERTEX:
+			return true;
+
+	}
+
+	return false;
+
+};
+
+THREE.CameraNode.prototype.isShared = function ( builder ) {
+
+	switch ( this.scope ) {
+
+		case THREE.CameraNode.POSITION:
+			return false;
+
+	}
+
+	return true;
+
+};
+
+THREE.CameraNode.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material;
+	var result;
+
+	switch ( this.scope ) {
+
+		case THREE.CameraNode.POSITION:
+
+			result = 'cameraPosition';
+
+			break;
+
+		case THREE.CameraNode.DEPTH:
+
+			var func = THREE.CameraNode.fDepthColor;
+
+			builder.include( func );
+
+			result = func.name + '(' + this.near.build( builder, 'fv1' ) + ',' + this.far.build( builder, 'fv1' ) + ')';
+
+			break;
+
+		case THREE.CameraNode.TO_VERTEX:
+
+			result = 'normalize( ' + new THREE.PositionNode( THREE.PositionNode.WORLD ).build( builder, 'v3' ) + ' - cameraPosition )';
+
+			break;
+
+	}
+
+	return builder.format( result, this.getType( builder ), output );
+
+};
+
+THREE.CameraNode.prototype.onUpdateFrame = function ( frame ) {
+
+	switch ( this.scope ) {
+
+		case THREE.CameraNode.DEPTH:
+
+			var camera = this.camera;
+
+			this.near.number = camera.near;
+			this.far.number = camera.far;
+
+			break;
+
+	}
+
+};
+
+THREE.CameraNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.scope = this.scope;
+
+		if ( this.camera ) data.camera = this.camera.uuid;
+
+		switch ( this.scope ) {
+
+			case THREE.CameraNode.DEPTH:
+
+				data.near = this.near.number;
+				data.far = this.far.number;
+
+				break;
+
+		}
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.ReflectNode = function ( scope ) {
+
+	THREE.TempNode.call( this, 'v3', { unique: true } );
+
+	this.scope = scope || THREE.ReflectNode.CUBE;
+
+};
+
+THREE.ReflectNode.CUBE = 'cube';
+THREE.ReflectNode.SPHERE = 'sphere';
+THREE.ReflectNode.VECTOR = 'vector';
+
+THREE.ReflectNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.ReflectNode.prototype.constructor = THREE.ReflectNode;
+THREE.ReflectNode.prototype.nodeType = "Reflect";
+
+THREE.ReflectNode.prototype.getType = function ( builder ) {
+
+	switch ( this.scope ) {
+
+		case THREE.ReflectNode.SPHERE:
+			return 'v2';
+
+	}
+
+	return this.type;
+
+};
+
+THREE.ReflectNode.prototype.generate = function ( builder, output ) {
+
+	var result;
+
+	switch ( this.scope ) {
+
+		case THREE.ReflectNode.VECTOR:
+
+			builder.material.addFragmentNode( 'vec3 reflectVec = inverseTransformDirection( reflect( -normalize( vViewPosition ), normal ), viewMatrix );' );
+
+			result = 'reflectVec';
+
+			break;
+
+		case THREE.ReflectNode.CUBE:
+
+			var reflectVec = new THREE.ReflectNode( THREE.ReflectNode.VECTOR ).build( builder, 'v3' );
+
+			builder.material.addFragmentNode( 'vec3 reflectCubeVec = vec3( -1.0 * ' + reflectVec + '.x, ' + reflectVec + '.yz );' );
+
+			result = 'reflectCubeVec';
+
+			break;
+
+		case THREE.ReflectNode.SPHERE:
+
+			var reflectVec = new THREE.ReflectNode( THREE.ReflectNode.VECTOR ).build( builder, 'v3' );
+
+			builder.material.addFragmentNode( 'vec2 reflectSphereVec = normalize((viewMatrix * vec4(' + reflectVec + ', 0.0 )).xyz + vec3(0.0,0.0,1.0)).xy * 0.5 + 0.5;' );
+
+			result = 'reflectSphereVec';
+
+			break;
+
+	}
+
+	return builder.format( result, this.getType( this.type ), output );
+
+};
+
+THREE.ReflectNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.scope = this.scope;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.LightNode = function ( scope ) {
+
+	THREE.TempNode.call( this, 'v3', { shared: false } );
+
+	this.scope = scope || THREE.LightNode.TOTAL;
+
+};
+
+THREE.LightNode.TOTAL = 'total';
+
+THREE.LightNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.LightNode.prototype.constructor = THREE.LightNode;
+THREE.LightNode.prototype.nodeType = "Light";
+
+THREE.LightNode.prototype.generate = function ( builder, output ) {
+
+	if ( builder.isCache( 'light' ) ) {
+
+		return builder.format( 'reflectedLight.directDiffuse', this.getType( builder ), output );
+
+	} else {
+
+		console.warn( "THREE.LightNode is only compatible in \"light\" channel." );
+
+		return builder.format( 'vec3( 0.0 )', this.getType( builder ), output );
+
+	}
+
+};
+
+THREE.LightNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.scope = this.scope;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.IntNode = function ( value ) {
+
+	THREE.InputNode.call( this, 'iv1' );
+
+	this.value = [ Math.floor( value || 0 ) ];
+
+};
+
+THREE.IntNode.prototype = Object.create( THREE.InputNode.prototype );
+THREE.IntNode.prototype.constructor = THREE.IntNode;
+THREE.IntNode.prototype.nodeType = "Int";
+
+Object.defineProperties( THREE.IntNode.prototype, {
+	number: {
+		get: function () {
+
+			return this.value[ 0 ];
+
+		},
+		set: function ( val ) {
+
+			this.value[ 0 ] = Math.floor( val );
+
+		}
+	}
+} );
+
+THREE.IntNode.prototype.generateReadonly = function ( builder, output, uuid, type, ns, needsUpdate ) {
+
+	return builder.format( this.number, type, output );
+
+};
+
+THREE.IntNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.number = this.number;
+
+		if ( this.readonly === true ) data.readonly = true;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.FloatNode = function ( value ) {
+
+	THREE.InputNode.call( this, 'fv1' );
+
+	this.value = [ value || 0 ];
+
+};
+
+THREE.FloatNode.prototype = Object.create( THREE.InputNode.prototype );
+THREE.FloatNode.prototype.constructor = THREE.FloatNode;
+THREE.FloatNode.prototype.nodeType = "Float";
+
+Object.defineProperties( THREE.FloatNode.prototype, {
+	number: {
+		get: function () {
+
+			return this.value[ 0 ];
+
+		},
+		set: function ( val ) {
+
+			this.value[ 0 ] = val;
+
+		}
+	}
+} );
+
+THREE.FloatNode.prototype.generateReadonly = function ( builder, output, uuid, type, ns, needsUpdate ) {
+
+	var value = this.number;
+
+	return builder.format( Math.floor( value ) !== value ? value : value + ".0", type, output );
+
+};
+
+THREE.FloatNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.number = this.number;
+
+		if ( this.readonly === true ) data.readonly = true;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.ColorNode = function ( color ) {
+
+	THREE.InputNode.call( this, 'c' );
+
+	this.value = new THREE.Color( color || 0 );
+
+};
+
+THREE.ColorNode.prototype = Object.create( THREE.InputNode.prototype );
+THREE.ColorNode.prototype.constructor = THREE.ColorNode;
+THREE.ColorNode.prototype.nodeType = "Color";
+
+THREE.NodeMaterial.addShortcuts( THREE.ColorNode.prototype, 'value', [ 'r', 'g', 'b' ] );
+
+THREE.ColorNode.prototype.generateReadonly = function ( builder, output, uuid, type, ns, needsUpdate ) {
+
+	return builder.format( "vec3( " + this.r + ", " + this.g + ", " + this.b + " )", type, output );
+
+};
+
+THREE.ColorNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.r = this.r;
+		data.g = this.g;
+		data.b = this.b;
+
+		if ( this.readonly === true ) data.readonly = true;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.Vector2Node = function ( x, y ) {
+
+	THREE.InputNode.call( this, 'v2' );
+
+	this.value = new THREE.Vector2( x, y );
+
+};
+
+THREE.Vector2Node.prototype = Object.create( THREE.InputNode.prototype );
+THREE.Vector2Node.prototype.constructor = THREE.Vector2Node;
+THREE.Vector2Node.prototype.nodeType = "Vector2";
+
+THREE.NodeMaterial.addShortcuts( THREE.Vector2Node.prototype, 'value', [ 'x', 'y' ] );
+
+THREE.Vector2Node.prototype.generateReadonly = function ( builder, output, uuid, type, ns, needsUpdate ) {
+
+	return builder.format( "vec2( " + this.x + ", " + this.y + " )", type, output );
+
+};
+
+THREE.Vector2Node.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.x = this.x;
+		data.y = this.y;
+
+		if ( this.readonly === true ) data.readonly = true;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.Vector3Node = function ( x, y, z ) {
+
+	THREE.InputNode.call( this, 'v3' );
+
+	this.type = 'v3';
+	this.value = new THREE.Vector3( x, y, z );
+
+};
+
+THREE.Vector3Node.prototype = Object.create( THREE.InputNode.prototype );
+THREE.Vector3Node.prototype.constructor = THREE.Vector3Node;
+THREE.Vector3Node.prototype.nodeType = "Vector3";
+
+THREE.NodeMaterial.addShortcuts( THREE.Vector3Node.prototype, 'value', [ 'x', 'y', 'z' ] );
+
+THREE.Vector3Node.prototype.generateReadonly = function ( builder, output, uuid, type, ns, needsUpdate ) {
+
+	return builder.format( "vec3( " + this.x + ", " + this.y + ", " + this.z + " )", type, output );
+
+};
+
+THREE.Vector3Node.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.x = this.x;
+		data.y = this.y;
+		data.z = this.z;
+
+		if ( this.readonly === true ) data.readonly = true;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.Vector4Node = function ( x, y, z, w ) {
+
+	THREE.InputNode.call( this, 'v4' );
+
+	this.value = new THREE.Vector4( x, y, z, w );
+
+};
+
+THREE.Vector4Node.prototype = Object.create( THREE.InputNode.prototype );
+THREE.Vector4Node.prototype.constructor = THREE.Vector4Node;
+THREE.Vector4Node.prototype.nodeType = "Vector4";
+
+THREE.NodeMaterial.addShortcuts( THREE.Vector4Node.prototype, 'value', [ 'x', 'y', 'z', 'w' ] );
+
+THREE.Vector4Node.prototype.generateReadonly = function ( builder, output, uuid, type, ns, needsUpdate ) {
+
+	return builder.format( "vec4( " + this.x + ", " + this.y + ", " + this.z + ", " + this.w + " )", type, output );
+
+};
+
+THREE.Vector4Node.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.x = this.x;
+		data.y = this.y;
+		data.z = this.z;
+		data.w = this.w;
+
+		if ( this.readonly === true ) data.readonly = true;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.TextureNode = function ( value, coord, bias, project ) {
+
+	THREE.InputNode.call( this, 'v4', { shared: true } );
+
+	this.value = value;
+	this.coord = coord || new THREE.UVNode();
+	this.bias = bias;
+	this.project = project !== undefined ? project : false;
+
+};
+
+THREE.TextureNode.prototype = Object.create( THREE.InputNode.prototype );
+THREE.TextureNode.prototype.constructor = THREE.TextureNode;
+THREE.TextureNode.prototype.nodeType = "Texture";
+
+THREE.TextureNode.prototype.getTexture = function ( builder, output ) {
+
+	return THREE.InputNode.prototype.generate.call( this, builder, output, this.value.uuid, 't' );
+
+};
+
+THREE.TextureNode.prototype.generate = function ( builder, output ) {
+
+	if ( output === 'sampler2D' ) {
+
+		return this.getTexture( builder, output );
+
+	}
+
+	var tex = this.getTexture( builder, output );
+	var coord = this.coord.build( builder, this.project ? 'v4' : 'v2' );
+	var bias = this.bias ? this.bias.build( builder, 'fv1' ) : undefined;
+
+	if ( bias == undefined && builder.requires.bias ) {
+
+		bias = builder.requires.bias.build( builder, 'fv1' );
+
+	}
+
+	var method, code;
+
+	if ( this.project ) method = 'texture2DProj';
+	else method = bias ? 'tex2DBias' : 'tex2D';
+
+	if ( bias ) code = method + '(' + tex + ',' + coord + ',' + bias + ')';
+	else code = method + '(' + tex + ',' + coord + ')';
+
+	if ( builder.isSlot( 'color' ) ) {
+
+		code = 'mapTexelToLinear(' + code + ')';
+
+	} else if ( builder.isSlot( 'emissive' ) ) {
+
+		code = 'emissiveMapTexelToLinear(' + code + ')';
+
+	} else if ( builder.isSlot( 'environment' ) ) {
+
+		code = 'envMapTexelToLinear(' + code + ')';
+
+	}
+
+	return builder.format( code, this.type, output );
+
+};
+
+THREE.TextureNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		if ( this.value ) data.value = this.value.uuid;
+
+		data.coord = this.coord.toJSON( meta ).uuid;
+		data.project = this.project;
+
+		if ( this.bias ) data.bias = this.bias.toJSON( meta ).uuid;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.Matrix3Node = function ( matrix ) {
+
+	THREE.InputNode.call( this, 'm3' );
+
+	this.value = matrix || new THREE.Matrix3();
+
+};
+
+THREE.Matrix3Node.prototype = Object.create( THREE.InputNode.prototype );
+THREE.Matrix3Node.prototype.constructor = THREE.Matrix3Node;
+THREE.Matrix3Node.prototype.nodeType = "Matrix3";
+
+THREE.Matrix3Node.prototype.generateReadonly = function ( builder, output, uuid, type, ns, needsUpdate ) {
+
+	return builder.format( "mat3( " + this.value.elements.join( ", " ) + " )", type, output );
+
+};
+
+THREE.Matrix3Node.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.elements = this.value.elements.concat();
+
+		if ( this.readonly === true ) data.readonly = true;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.Matrix4Node = function ( matrix ) {
+
+	THREE.InputNode.call( this, 'm4' );
+
+	this.value = matrix || new THREE.Matrix4();
+
+};
+
+THREE.Matrix4Node.prototype = Object.create( THREE.InputNode.prototype );
+THREE.Matrix4Node.prototype.constructor = THREE.Matrix4Node;
+THREE.Matrix4Node.prototype.nodeType = "Matrix4";
+
+THREE.Matrix4Node.prototype.generateReadonly = function ( builder, output, uuid, type, ns, needsUpdate ) {
+
+	return builder.format( "mat4( " + this.value.elements.join( ", " ) + " )", type, output );
+
+};
+
+THREE.Matrix4Node.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.elements = this.value.elements.concat();
+
+		if ( this.readonly === true ) data.readonly = true;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.CubeTextureNode = function ( value, coord, bias ) {
+
+	THREE.InputNode.call( this, 'v4', { shared: true } );
+
+	this.value = value;
+	this.coord = coord || new THREE.ReflectNode();
+	this.bias = bias;
+
+};
+
+THREE.CubeTextureNode.prototype = Object.create( THREE.InputNode.prototype );
+THREE.CubeTextureNode.prototype.constructor = THREE.CubeTextureNode;
+THREE.CubeTextureNode.prototype.nodeType = "CubeTexture";
+
+THREE.CubeTextureNode.prototype.getTexture = function ( builder, output ) {
+
+	return THREE.InputNode.prototype.generate.call( this, builder, output, this.value.uuid, 't' );
+
+};
+
+THREE.CubeTextureNode.prototype.generate = function ( builder, output ) {
+
+	if ( output === 'samplerCube' ) {
+
+		return this.getTexture( builder, output );
+
+	}
+
+	var cubetex = this.getTexture( builder, output );
+	var coord = this.coord.build( builder, 'v3' );
+	var bias = this.bias ? this.bias.build( builder, 'fv1' ) : undefined;
+
+	if ( bias == undefined && builder.requires.bias ) {
+
+		bias = builder.requires.bias.build( builder, 'fv1' );
+
+	}
+
+	var code;
+
+	if ( bias ) code = 'texCubeBias(' + cubetex + ',' + coord + ',' + bias + ')';
+	else code = 'texCube(' + cubetex + ',' + coord + ')';
+
+	if ( builder.isSlot( 'color' ) ) {
+
+		code = 'mapTexelToLinear(' + code + ')';
+
+	} else if ( builder.isSlot( 'emissive' ) ) {
+
+		code = 'emissiveMapTexelToLinear(' + code + ')';
+
+	} else if ( builder.isSlot( 'environment' ) ) {
+
+		code = 'envMapTexelToLinear(' + code + ')';
+
+	}
+
+	return builder.format( code, this.type, output );
+
+};
+
+THREE.CubeTextureNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.value = this.value.uuid;
+		data.coord = this.coord.toJSON( meta ).uuid;
+
+		if ( this.bias ) data.bias = this.bias.toJSON( meta ).uuid;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.Math1Node = function ( a, method ) {
+
+	THREE.TempNode.call( this );
+
+	this.a = a;
+
+	this.method = method || THREE.Math1Node.SIN;
+
+};
+
+THREE.Math1Node.RAD = 'radians';
+THREE.Math1Node.DEG = 'degrees';
+THREE.Math1Node.EXP = 'exp';
+THREE.Math1Node.EXP2 = 'exp2';
+THREE.Math1Node.LOG = 'log';
+THREE.Math1Node.LOG2 = 'log2';
+THREE.Math1Node.SQRT = 'sqrt';
+THREE.Math1Node.INV_SQRT = 'inversesqrt';
+THREE.Math1Node.FLOOR = 'floor';
+THREE.Math1Node.CEIL = 'ceil';
+THREE.Math1Node.NORMALIZE = 'normalize';
+THREE.Math1Node.FRACT = 'fract';
+THREE.Math1Node.SAT = 'saturate';
+THREE.Math1Node.SIN = 'sin';
+THREE.Math1Node.COS = 'cos';
+THREE.Math1Node.TAN = 'tan';
+THREE.Math1Node.ASIN = 'asin';
+THREE.Math1Node.ACOS = 'acos';
+THREE.Math1Node.ARCTAN = 'atan';
+THREE.Math1Node.ABS = 'abs';
+THREE.Math1Node.SIGN = 'sign';
+THREE.Math1Node.LENGTH = 'length';
+THREE.Math1Node.NEGATE = 'negate';
+THREE.Math1Node.INVERT = 'invert';
+
+THREE.Math1Node.prototype = Object.create( THREE.TempNode.prototype );
+THREE.Math1Node.prototype.constructor = THREE.Math1Node;
+THREE.Math1Node.prototype.nodeType = "Math1";
+
+THREE.Math1Node.prototype.getType = function ( builder ) {
+
+	switch ( this.method ) {
+
+		case THREE.Math1Node.LENGTH:
+			return 'fv1';
+
+	}
+
+	return this.a.getType( builder );
+
+};
+
+THREE.Math1Node.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material;
+
+	var type = this.getType( builder );
+
+	var result = this.a.build( builder, type );
+
+	switch ( this.method ) {
+
+		case THREE.Math1Node.NEGATE:
+			result = '(-' + result + ')';
+			break;
+
+		case THREE.Math1Node.INVERT:
+			result = '(1.0-' + result + ')';
+			break;
+
+		default:
+			result = this.method + '(' + result + ')';
+			break;
+
+	}
+
+	return builder.format( result, type, output );
+
+};
+
+THREE.Math1Node.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.a = this.a.toJSON( meta ).uuid;
+		data.method = this.method;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.Math2Node = function ( a, b, method ) {
+
+	THREE.TempNode.call( this );
+
+	this.a = a;
+	this.b = b;
+
+	this.method = method || THREE.Math2Node.DISTANCE;
+
+};
+
+THREE.Math2Node.MIN = 'min';
+THREE.Math2Node.MAX = 'max';
+THREE.Math2Node.MOD = 'mod';
+THREE.Math2Node.STEP = 'step';
+THREE.Math2Node.REFLECT = 'reflect';
+THREE.Math2Node.DISTANCE = 'distance';
+THREE.Math2Node.DOT = 'dot';
+THREE.Math2Node.CROSS = 'cross';
+THREE.Math2Node.POW = 'pow';
+
+THREE.Math2Node.prototype = Object.create( THREE.TempNode.prototype );
+THREE.Math2Node.prototype.constructor = THREE.Math2Node;
+THREE.Math2Node.prototype.nodeType = "Math2";
+
+THREE.Math2Node.prototype.getInputType = function ( builder ) {
+
+	// use the greater length vector
+	if ( builder.getFormatLength( this.b.getType( builder ) ) > builder.getFormatLength( this.a.getType( builder ) ) ) {
+
+		return this.b.getType( builder );
+
+	}
+
+	return this.a.getType( builder );
+
+};
+
+THREE.Math2Node.prototype.getType = function ( builder ) {
+
+	switch ( this.method ) {
+
+		case THREE.Math2Node.DISTANCE:
+		case THREE.Math2Node.DOT:
+			return 'fv1';
+
+		case THREE.Math2Node.CROSS:
+			return 'v3';
+
+	}
+
+	return this.getInputType( builder );
+
+};
+
+THREE.Math2Node.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material;
+
+	var type = this.getInputType( builder );
+
+	var a, b,
+		al = builder.getFormatLength( this.a.getType( builder ) ),
+		bl = builder.getFormatLength( this.b.getType( builder ) );
+
+	// optimzer
+
+	switch ( this.method ) {
+
+		case THREE.Math2Node.CROSS:
+			a = this.a.build( builder, 'v3' );
+			b = this.b.build( builder, 'v3' );
+			break;
+
+		case THREE.Math2Node.STEP:
+			a = this.a.build( builder, al == 1 ? 'fv1' : type );
+			b = this.b.build( builder, type );
+			break;
+
+		case THREE.Math2Node.MIN:
+		case THREE.Math2Node.MAX:
+		case THREE.Math2Node.MOD:
+			a = this.a.build( builder, type );
+			b = this.b.build( builder, bl == 1 ? 'fv1' : type );
+			break;
+
+		default:
+			a = this.a.build( builder, type );
+			b = this.b.build( builder, type );
+			break;
+
+	}
+
+	return builder.format( this.method + '(' + a + ',' + b + ')', this.getType( builder ), output );
+
+};
+
+THREE.Math2Node.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.a = this.a.toJSON( meta ).uuid;
+		data.b = this.b.toJSON( meta ).uuid;
+		data.method = this.method;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.Math3Node = function ( a, b, c, method ) {
+
+	THREE.TempNode.call( this );
+
+	this.a = a;
+	this.b = b;
+	this.c = c;
+
+	this.method = method || THREE.Math3Node.MIX;
+
+};
+
+THREE.Math3Node.MIX = 'mix';
+THREE.Math3Node.REFRACT = 'refract';
+THREE.Math3Node.SMOOTHSTEP = 'smoothstep';
+THREE.Math3Node.FACEFORWARD = 'faceforward';
+
+THREE.Math3Node.prototype = Object.create( THREE.TempNode.prototype );
+THREE.Math3Node.prototype.constructor = THREE.Math3Node;
+THREE.Math3Node.prototype.nodeType = "Math3";
+
+THREE.Math3Node.prototype.getType = function ( builder ) {
+
+	var a = builder.getFormatLength( this.a.getType( builder ) );
+	var b = builder.getFormatLength( this.b.getType( builder ) );
+	var c = builder.getFormatLength( this.c.getType( builder ) );
+
+	if ( a > b && a > c ) return this.a.getType( builder );
+	else if ( b > c ) return this.b.getType( builder );
+
+	return this.c.getType( builder );
+
+};
+
+THREE.Math3Node.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material;
+
+	var type = this.getType( builder );
+
+	var a, b, c,
+		al = builder.getFormatLength( this.a.getType( builder ) ),
+		bl = builder.getFormatLength( this.b.getType( builder ) ),
+		cl = builder.getFormatLength( this.c.getType( builder ) );
+
+	// optimzer
+
+	switch ( this.method ) {
+
+		case THREE.Math3Node.REFRACT:
+			a = this.a.build( builder, type );
+			b = this.b.build( builder, type );
+			c = this.c.build( builder, 'fv1' );
+			break;
+
+		case THREE.Math3Node.MIX:
+			a = this.a.build( builder, type );
+			b = this.b.build( builder, type );
+			c = this.c.build( builder, cl == 1 ? 'fv1' : type );
+			break;
+
+		default:
+			a = this.a.build( builder, type );
+			b = this.b.build( builder, type );
+			c = this.c.build( builder, type );
+			break;
+
+	}
+
+	return builder.format( this.method + '(' + a + ',' + b + ',' + c + ')', type, output );
+
+};
+
+THREE.Math3Node.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.a = this.a.toJSON( meta ).uuid;
+		data.b = this.b.toJSON( meta ).uuid;
+		data.c = this.c.toJSON( meta ).uuid;
+		data.method = this.method;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.OperatorNode = function ( a, b, op ) {
+
+	THREE.TempNode.call( this );
+
+	this.a = a;
+	this.b = b;
+	this.op = op || THREE.OperatorNode.ADD;
+
+};
+
+THREE.OperatorNode.ADD = '+';
+THREE.OperatorNode.SUB = '-';
+THREE.OperatorNode.MUL = '*';
+THREE.OperatorNode.DIV = '/';
+
+THREE.OperatorNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.OperatorNode.prototype.constructor = THREE.OperatorNode;
+THREE.OperatorNode.prototype.nodeType = "Operator";
+
+THREE.OperatorNode.prototype.getType = function ( builder ) {
+
+	var a = this.a.getType( builder );
+	var b = this.b.getType( builder );
+
+	if ( builder.isFormatMatrix( a ) ) {
+
+		return 'v4';
+
+	} else if ( builder.getFormatLength( b ) > builder.getFormatLength( a ) ) {
+
+		// use the greater length vector
+
+		return b;
+
+	}
+
+	return a;
+
+};
+
+THREE.OperatorNode.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material,
+		data = material.getDataNode( this.uuid );
+
+	var type = this.getType( builder );
+
+	var a = this.a.build( builder, type );
+	var b = this.b.build( builder, type );
+
+	return builder.format( '(' + a + this.op + b + ')', type, output );
+
+};
+
+THREE.OperatorNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.a = this.a.toJSON( meta ).uuid;
+		data.b = this.b.toJSON( meta ).uuid;
+		data.op = this.op;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.SwitchNode = function ( node, components ) {
+
+	THREE.GLNode.call( this );
+
+	this.node = node;
+	this.components = components || 'x';
+
+};
+
+THREE.SwitchNode.prototype = Object.create( THREE.GLNode.prototype );
+THREE.SwitchNode.prototype.constructor = THREE.SwitchNode;
+THREE.SwitchNode.prototype.nodeType = "Switch";
+
+THREE.SwitchNode.prototype.getType = function ( builder ) {
+
+	return builder.getFormatFromLength( this.components.length );
+
+};
+
+THREE.SwitchNode.prototype.generate = function ( builder, output ) {
+
+	var type = this.node.getType( builder );
+	var inputLength = builder.getFormatLength( type ) - 1;
+
+	var node = this.node.build( builder, type );
+
+	if ( inputLength > 0 ) {
+
+		// get max length
+
+		var outputLength = 0;
+		var components = builder.colorToVector( this.components );
+
+		var i, len = components.length;
+
+		for ( i = 0; i < len; i ++ ) {
+
+			outputLength = Math.max( outputLength, builder.getIndexByElement( components.charAt( i ) ) );
+
+		}
+
+		if ( outputLength > inputLength ) outputLength = inputLength;
+
+		// split
+
+		node += '.';
+
+		for ( i = 0; i < len; i ++ ) {
+
+			var elm = components.charAt( i );
+			var idx = builder.getIndexByElement( components.charAt( i ) );
+
+			if ( idx > outputLength ) idx = outputLength;
+
+			node += builder.getElementByIndex( idx );
+
+		}
+
+		return builder.format( node, this.getType( builder ), output );
+
+	} else {
+
+		// join
+
+		return builder.format( node, type, output );
+
+	}
+
+};
+
+THREE.SwitchNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.node = this.node.toJSON( meta ).uuid;
+		data.components = this.components;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.JoinNode = function ( x, y, z, w ) {
+
+	THREE.TempNode.call( this, 'fv1' );
+
+	this.x = x;
+	this.y = y;
+	this.z = z;
+	this.w = w;
+
+};
+
+THREE.JoinNode.inputs = [ 'x', 'y', 'z', 'w' ];
+
+THREE.JoinNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.JoinNode.prototype.constructor = THREE.JoinNode;
+THREE.JoinNode.prototype.nodeType = "Join";
+
+THREE.JoinNode.prototype.getNumElements = function () {
+
+	var inputs = THREE.JoinNode.inputs;
+	var i = inputs.length;
+
+	while ( i -- ) {
+
+		if ( this[ inputs[ i ] ] !== undefined ) {
+
+			++ i;
+			break;
+
+		}
+
+	}
+
+	return Math.max( i, 2 );
+
+};
+
+THREE.JoinNode.prototype.getType = function ( builder ) {
+
+	return builder.getFormatFromLength( this.getNumElements() );
+
+};
+
+THREE.JoinNode.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material;
+
+	var type = this.getType( builder );
+	var length = this.getNumElements();
+
+	var inputs = THREE.JoinNode.inputs;
+	var outputs = [];
+
+	for ( var i = 0; i < length; i ++ ) {
+
+		var elm = this[ inputs[ i ] ];
+
+		outputs.push( elm ? elm.build( builder, 'fv1' ) : '0.' );
+
+	}
+
+	var code = ( length > 1 ? builder.getConstructorFromLength( length ) : '' ) + '(' + outputs.join( ',' ) + ')';
+
+	return builder.format( code, type, output );
+
+};
+
+THREE.JoinNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.inputs = {};
+
+		var length = this.getNumElements();
+		var inputs = THREE.JoinNode.inputs;
+
+		for ( var i = 0; i < length; i ++ ) {
+
+			var elm = this[ inputs[ i ] ];
+
+			if ( elm ) {
+
+				data.inputs[ inputs[ i ] ] = elm.toJSON( meta ).uuid;
+
+			}
+
+		}
+
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.TimerNode = function ( scale, scope ) {
+
+	THREE.FloatNode.call( this );
+
+	this.scale = scale !== undefined ? scale : 1;
+	this.scope = scope || THREE.TimerNode.GLOBAL;
+
+	this.timeScale = this.scale !== 1;
+
+};
+
+THREE.TimerNode.GLOBAL = 'global';
+THREE.TimerNode.LOCAL = 'local';
+THREE.TimerNode.DELTA = 'delta';
+
+THREE.TimerNode.prototype = Object.create( THREE.FloatNode.prototype );
+THREE.TimerNode.prototype.constructor = THREE.TimerNode;
+THREE.TimerNode.prototype.nodeType = "Timer";
+
+THREE.TimerNode.prototype.isReadonly = function ( builder ) {
+
+	return false;
+
+};
+
+THREE.TimerNode.prototype.isUnique = function ( builder ) {
+
+	// share TimerNode "uniform" input if is used on more time with others TimerNode
+	return this.timeScale && ( this.scope === THREE.TimerNode.GLOBAL || this.scope === THREE.TimerNode.DELTA );
+
+};
+
+THREE.TimerNode.prototype.updateFrame = function ( frame ) {
+
+	var scale = this.timeScale ? this.scale : 1;
+
+	switch( this.scope ) {
+
+		case THREE.TimerNode.LOCAL:
+
+			this.number += frame.delta * scale;
+
+			break;
+
+		case THREE.TimerNode.DELTA:
+
+			this.number = frame.delta * scale;
+
+			break;
+
+		default:
+
+			this.number = frame.time * scale;
+
+	}
+
+};
+
+THREE.TimerNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.scope = this.scope;
+		data.scale = this.scale;
+		data.timeScale = this.timeScale;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.RoughnessToBlinnExponentNode = function () {
+
+	THREE.TempNode.call( this, 'fv1' );
+
+};
+
+THREE.RoughnessToBlinnExponentNode.getSpecularMIPLevel = new THREE.FunctionNode( [
+// taken from here: http://casual-effects.blogspot.ca/2011/08/plausible-environment-lighting-in-two.html
+	"float getSpecularMIPLevel( const in float blinnShininessExponent, const in int maxMIPLevel ) {",
+
+	//	float envMapWidth = pow( 2.0, maxMIPLevelScalar );
+	//	float desiredMIPLevel = log2( envMapWidth * sqrt( 3.0 ) ) - 0.5 * log2( pow2( blinnShininessExponent ) + 1.0 );
+	"	float maxMIPLevelScalar = float( maxMIPLevel );",
+	"	float desiredMIPLevel = maxMIPLevelScalar - 0.79248 - 0.5 * log2( pow2( blinnShininessExponent ) + 1.0 );",
+
+	// clamp to allowable LOD ranges.
+	"	return clamp( desiredMIPLevel, 0.0, maxMIPLevelScalar );",
+	"}"
+].join( "\n" ) );
+
+THREE.RoughnessToBlinnExponentNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.RoughnessToBlinnExponentNode.prototype.constructor = THREE.RoughnessToBlinnExponentNode;
+THREE.RoughnessToBlinnExponentNode.prototype.nodeType = "RoughnessToBlinnExponent";
+
+THREE.RoughnessToBlinnExponentNode.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material;
+
+	if ( builder.isShader( 'fragment' ) ) {
+
+		if ( material.isDefined( 'PHYSICAL' ) ) {
+
+			builder.include( THREE.RoughnessToBlinnExponentNode.getSpecularMIPLevel );
+
+			if ( builder.isCache( 'clearCoat' ) ) {
+
+				return builder.format( 'getSpecularMIPLevel( Material_ClearCoat_BlinnShininessExponent( material ), 8 )', this.type, output );
+
+			} else {
+
+				return builder.format( 'getSpecularMIPLevel( Material_BlinnShininessExponent( material ), 8 )', this.type, output );
+
+			}
+
+		} else {
+
+			console.warn( "THREE.RoughnessToBlinnExponentNode is only compatible with PhysicalMaterial." );
+
+			return builder.format( '0.0', this.type, output );
+
+		}
+
+	} else {
+
+		console.warn( "THREE.RoughnessToBlinnExponentNode is not compatible with " + builder.shader + " shader." );
+
+		return builder.format( '0.0', this.type, output );
+
+	}
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.VelocityNode = function ( target, params ) {
+
+	THREE.Vector3Node.call( this );
+
+	this.params = {};
+
+	this.velocity = new THREE.Vector3();
+
+	this.setTarget( target );
+	this.setParams( params );
+
+};
+
+THREE.VelocityNode.prototype = Object.create( THREE.Vector3Node.prototype );
+THREE.VelocityNode.prototype.constructor = THREE.VelocityNode;
+THREE.VelocityNode.prototype.nodeType = "Velocity";
+
+THREE.VelocityNode.prototype.isReadonly = function ( builder ) {
+
+	return false;
+
+};
+
+THREE.VelocityNode.prototype.setParams = function ( params ) {
+
+	switch ( this.params.type ) {
+
+		case "elastic":
+
+			delete this.moment;
+
+			delete this.speed;
+			delete this.springVelocity;
+
+			delete this.lastVelocity;
+
+			break;
+
+	}
+
+	this.params = params || {};
+
+	switch ( this.params.type ) {
+
+		case "elastic":
+
+			this.moment = new THREE.Vector3();
+
+			this.speed = new THREE.Vector3();
+			this.springVelocity = new THREE.Vector3();
+
+			this.lastVelocity = new THREE.Vector3();
+
+			break;
+
+	}
+
+};
+
+THREE.VelocityNode.prototype.setTarget = function ( target ) {
+
+	if ( this.target ) {
+
+		delete this.position;
+		delete this.oldPosition;
+
+	}
+
+	this.target = target;
+
+	if ( target ) {
+
+		this.position = target.getWorldPosition();
+		this.oldPosition = this.position.clone();
+
+	}
+
+};
+
+THREE.VelocityNode.prototype.updateFrameVelocity = function ( frame ) {
+
+	if ( this.target ) {
+
+		this.position = this.target.getWorldPosition();
+		this.velocity.subVectors( this.position, this.oldPosition );
+		this.oldPosition.copy( this.position );
+
+	}
+
+};
+
+THREE.VelocityNode.prototype.updateFrame = function ( frame ) {
+
+	this.updateFrameVelocity( frame );
+
+	switch ( this.params.type ) {
+
+		case "elastic":
+
+			// convert to real scale: 0 at 1 values
+			var deltaFps = frame.delta * ( this.params.fps || 60 );
+
+			var spring = Math.pow( this.params.spring, deltaFps ),
+				damping = Math.pow( this.params.damping, deltaFps );
+
+			// fix relative frame-rate
+			this.velocity.multiplyScalar( Math.exp( - this.params.damping * deltaFps ) );
+
+			// elastic
+			this.velocity.add( this.springVelocity );
+			this.velocity.add( this.speed.multiplyScalar( damping ).multiplyScalar( 1 - spring ) );
+
+			// speed
+			this.speed.subVectors( this.velocity, this.lastVelocity );
+
+			// spring velocity
+			this.springVelocity.add( this.speed );
+			this.springVelocity.multiplyScalar( spring );
+
+			// moment
+			this.moment.add( this.springVelocity );
+
+			// damping
+			this.moment.multiplyScalar( damping );
+
+			this.lastVelocity.copy( this.velocity );
+			this.value.copy( this.moment );
+
+			break;
+
+		default:
+
+			this.value.copy( this.velocity );
+
+	}
+
+};
+
+THREE.VelocityNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		if ( this.target ) data.target = this.target.uuid;
+
+		// clone params
+		data.params = JSON.parse( JSON.stringify( this.params ) );
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.LuminanceNode = function ( rgb ) {
+
+	THREE.TempNode.call( this, 'fv1' );
+
+	this.rgb = rgb;
+
+};
+
+THREE.LuminanceNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.LuminanceNode.prototype.constructor = THREE.LuminanceNode;
+THREE.LuminanceNode.prototype.nodeType = "Luminance";
+
+THREE.LuminanceNode.prototype.generate = function ( builder, output ) {
+
+	builder.include( 'luminance_rgb' );
+
+	return builder.format( 'luminance_rgb(' + this.rgb.build( builder, 'v3' ) + ')', this.getType( builder ), output );
+
+};
+
+THREE.LuminanceNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.rgb = this.rgb.toJSON( meta ).uuid;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.ColorAdjustmentNode = function ( rgb, adjustment, method ) {
+
+	THREE.TempNode.call( this, 'v3' );
+
+	this.rgb = rgb;
+	this.adjustment = adjustment;
+
+	this.method = method || THREE.ColorAdjustmentNode.SATURATION;
+
+};
+
+THREE.ColorAdjustmentNode.SATURATION = 'saturation';
+THREE.ColorAdjustmentNode.HUE = 'hue';
+THREE.ColorAdjustmentNode.VIBRANCE = 'vibrance';
+THREE.ColorAdjustmentNode.BRIGHTNESS = 'brightness';
+THREE.ColorAdjustmentNode.CONTRAST = 'contrast';
+
+THREE.ColorAdjustmentNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.ColorAdjustmentNode.prototype.constructor = THREE.ColorAdjustmentNode;
+THREE.ColorAdjustmentNode.prototype.nodeType = "ColorAdjustment";
+
+THREE.ColorAdjustmentNode.prototype.generate = function ( builder, output ) {
+
+	var rgb = this.rgb.build( builder, 'v3' );
+	var adjustment = this.adjustment.build( builder, 'fv1' );
+
+	var name;
+
+	switch ( this.method ) {
+
+		case THREE.ColorAdjustmentNode.SATURATION:
+
+			name = 'saturation_rgb';
+
+			break;
+
+		case THREE.ColorAdjustmentNode.HUE:
+
+			name = 'hue_rgb';
+
+			break;
+
+		case THREE.ColorAdjustmentNode.VIBRANCE:
+
+			name = 'vibrance_rgb';
+
+			break;
+
+		case THREE.ColorAdjustmentNode.BRIGHTNESS:
+
+			return builder.format( '(' + rgb + '+' + adjustment + ')', this.getType( builder ), output );
+
+			break;
+
+		case THREE.ColorAdjustmentNode.CONTRAST:
+
+			return builder.format( '(' + rgb + '*' + adjustment + ')', this.getType( builder ), output );
+
+			break;
+
+	}
+
+	builder.include( name );
+
+	return builder.format( name + '(' + rgb + ',' + adjustment + ')', this.getType( builder ), output );
+
+};
+
+THREE.ColorAdjustmentNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.rgb = this.rgb.toJSON( meta ).uuid;
+		data.adjustment = this.adjustment.toJSON( meta ).uuid;
+		data.method = this.method;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.NoiseNode = function ( coord ) {
+
+	THREE.TempNode.call( this, 'fv1' );
+
+	this.coord = coord;
+
+};
+
+THREE.NoiseNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.NoiseNode.prototype.constructor = THREE.NoiseNode;
+THREE.NoiseNode.prototype.nodeType = "Noise";
+
+THREE.NoiseNode.prototype.generate = function ( builder, output ) {
+
+	builder.include( 'snoise' );
+
+	return builder.format( 'snoise(' + this.coord.build( builder, 'v2' ) + ')', this.getType( builder ), output );
+
+};
+
+THREE.NoiseNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.coord = this.coord.toJSON( meta ).uuid;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.ResolutionNode = function ( renderer ) {
+
+	THREE.Vector2Node.call( this );
+
+	this.renderer = renderer;
+
+};
+
+THREE.ResolutionNode.prototype = Object.create( THREE.Vector2Node.prototype );
+THREE.ResolutionNode.prototype.constructor = THREE.ResolutionNode;
+THREE.ResolutionNode.prototype.nodeType = "Resolution";
+
+THREE.ResolutionNode.prototype.updateFrame = function ( frame ) {
+
+	var size = this.renderer.getSize(),
+		pixelRatio = this.renderer.getPixelRatio();
+
+	this.x = size.width * pixelRatio;
+	this.y = size.height * pixelRatio;
+
+};
+
+THREE.ResolutionNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.renderer = this.renderer.uuid;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.BumpNode = function ( value, coord, scale ) {
+
+	THREE.TempNode.call( this, 'v3' );
+
+	this.value = value;
+	this.coord = coord || new THREE.UVNode();
+	this.scale = scale || new THREE.Vector2Node( 1, 1 );
+
+};
+
+THREE.BumpNode.fBumpToNormal = new THREE.FunctionNode( [
+	"vec3 bumpToNormal( sampler2D bumpMap, vec2 uv, vec2 scale ) {",
+	"	vec2 dSTdx = dFdx( uv );",
+	"	vec2 dSTdy = dFdy( uv );",
+	"	float Hll = texture2D( bumpMap, uv ).x;",
+	"	float dBx = texture2D( bumpMap, uv + dSTdx ).x - Hll;",
+	"	float dBy = texture2D( bumpMap, uv + dSTdy ).x - Hll;",
+	"	return vec3( .5 + ( dBx * scale.x ), .5 + ( dBy * scale.y ), 1.0 );",
+	"}"
+].join( "\n" ), null, { derivatives: true } );
+
+THREE.BumpNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.BumpNode.prototype.constructor = THREE.BumpNode;
+THREE.BumpNode.prototype.nodeType = "Bump";
+
+THREE.BumpNode.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material, func = THREE.BumpNode.fBumpToNormal;
+
+	builder.include( func );
+
+	if ( builder.isShader( 'fragment' ) ) {
+
+		return builder.format( func.name + '(' + this.value.build( builder, 'sampler2D' ) + ',' +
+			this.coord.build( builder, 'v2' ) + ',' +
+			this.scale.build( builder, 'v2' ) + ')', this.getType( builder ), output );
+
+	} else {
+
+		console.warn( "THREE.BumpNode is not compatible with " + builder.shader + " shader." );
+
+		return builder.format( 'vec3( 0.0 )', this.getType( builder ), output );
+
+	}
+
+};
+
+THREE.BumpNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.value = this.value.toJSON( meta ).uuid;
+		data.coord = this.coord.toJSON( meta ).uuid;
+		data.scale = this.scale.toJSON( meta ).uuid;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.BlurNode = function ( value, coord, radius, size ) {
+
+	THREE.TempNode.call( this, 'v4' );
+
+	this.value = value;
+	this.coord = coord || new THREE.UVNode();
+	this.radius = new THREE.Vector2Node( 1, 1 );
+	this.size = size;
+
+	this.blurX = true;
+	this.blurY = true;
+
+	this.horizontal = new THREE.FloatNode( 1 / 64 );
+	this.vertical = new THREE.FloatNode( 1 / 64 );
+
+};
+
+THREE.BlurNode.fBlurX = new THREE.FunctionNode( [
+	"vec4 blurX( sampler2D texture, vec2 uv, float s ) {",
+	"	vec4 sum = vec4( 0.0 );",
+	"	sum += texture2D( texture, vec2( uv.x - 4.0 * s, uv.y ) ) * 0.051;",
+	"	sum += texture2D( texture, vec2( uv.x - 3.0 * s, uv.y ) ) * 0.0918;",
+	"	sum += texture2D( texture, vec2( uv.x - 2.0 * s, uv.y ) ) * 0.12245;",
+	"	sum += texture2D( texture, vec2( uv.x - 1.0 * s, uv.y ) ) * 0.1531;",
+	"	sum += texture2D( texture, vec2( uv.x, uv.y ) ) * 0.1633;",
+	"	sum += texture2D( texture, vec2( uv.x + 1.0 * s, uv.y ) ) * 0.1531;",
+	"	sum += texture2D( texture, vec2( uv.x + 2.0 * s, uv.y ) ) * 0.12245;",
+	"	sum += texture2D( texture, vec2( uv.x + 3.0 * s, uv.y ) ) * 0.0918;",
+	"	sum += texture2D( texture, vec2( uv.x + 4.0 * s, uv.y ) ) * 0.051;",
+	"	return sum;",
+	"}"
+].join( "\n" ) );
+
+THREE.BlurNode.fBlurY = new THREE.FunctionNode( [
+	"vec4 blurY( sampler2D texture, vec2 uv, float s ) {",
+	"	vec4 sum = vec4( 0.0 );",
+	"	sum += texture2D( texture, vec2( uv.x, uv.y - 4.0 * s ) ) * 0.051;",
+	"	sum += texture2D( texture, vec2( uv.x, uv.y - 3.0 * s ) ) * 0.0918;",
+	"	sum += texture2D( texture, vec2( uv.x, uv.y - 2.0 * s ) ) * 0.12245;",
+	"	sum += texture2D( texture, vec2( uv.x, uv.y - 1.0 * s ) ) * 0.1531;",
+	"	sum += texture2D( texture, vec2( uv.x, uv.y ) ) * 0.1633;",
+	"	sum += texture2D( texture, vec2( uv.x, uv.y + 1.0 * s ) ) * 0.1531;",
+	"	sum += texture2D( texture, vec2( uv.x, uv.y + 2.0 * s ) ) * 0.12245;",
+	"	sum += texture2D( texture, vec2( uv.x, uv.y + 3.0 * s ) ) * 0.0918;",
+	"	sum += texture2D( texture, vec2( uv.x, uv.y + 4.0 * s ) ) * 0.051;",
+	"	return sum;",
+	"}"
+].join( "\n" ) );
+
+THREE.BlurNode.prototype = Object.create( THREE.TempNode.prototype );
+THREE.BlurNode.prototype.constructor = THREE.BlurNode;
+THREE.BlurNode.prototype.nodeType = "Blur";
+
+THREE.BlurNode.prototype.updateFrame = function ( frame ) {
+
+	if ( this.size ) {
+
+		this.horizontal.number = this.radius.x / this.size.x;
+		this.vertical.number = this.radius.y / this.size.y;
+
+	} else if ( this.value.value && this.value.value.image ) {
+
+		var image = this.value.value.image;
+
+		this.horizontal.number = this.radius.x / image.width;
+		this.vertical.number = this.radius.y / image.height;
+
+	}
+
+};
+
+THREE.BlurNode.prototype.generate = function ( builder, output ) {
+
+	var material = builder.material, blurX = THREE.BlurNode.fBlurX, blurY = THREE.BlurNode.fBlurY;
+
+	builder.include( blurX );
+	builder.include( blurY );
+
+	if ( builder.isShader( 'fragment' ) ) {
+
+		var blurCode = [], code;
+
+		if ( this.blurX ) {
+
+			blurCode.push( blurX.name + '(' + this.value.build( builder, 'sampler2D' ) + ',' + this.coord.build( builder, 'v2' ) + ',' + this.horizontal.build( builder, 'fv1' ) + ')' );
+
+		}
+
+		if ( this.blurY ) {
+
+			blurCode.push( blurY.name + '(' + this.value.build( builder, 'sampler2D' ) + ',' + this.coord.build( builder, 'v2' ) + ',' + this.vertical.build( builder, 'fv1' ) + ')' );
+
+		}
+
+		if ( blurCode.length == 2 ) code = '(' + blurCode.join( '+' ) + '/2.0)';
+		else if ( blurCode.length ) code = '(' + blurCode[ 0 ] + ')';
+		else code = 'vec4( 0.0 )';
+
+		return builder.format( code, this.getType( builder ), output );
+
+	} else {
+
+		console.warn( "THREE.BlurNode is not compatible with " + builder.shader + " shader." );
+
+		return builder.format( 'vec4( 0.0 )', this.getType( builder ), output );
+
+	}
+
+};
+
+THREE.BlurNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.value = this.value.toJSON( meta ).uuid;
+		data.coord = this.coord.toJSON( meta ).uuid;
+		data.radius = this.radius.toJSON( meta ).uuid;
+
+		if ( this.size ) data.size = { x: this.size.x, y: this.size.y };
+
+		data.blurX = this.blurX;
+		data.blurY = this.blurY;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.UVTransformNode = function () {
+
+	THREE.FunctionNode.call( this, "( uvTransform * vec3( uvNode, 1 ) ).xy", "vec2" );
+
+	this.uv = new THREE.UVNode();
+	this.transform = new THREE.Matrix3Node();
+
+};
+
+THREE.UVTransformNode.prototype = Object.create( THREE.FunctionNode.prototype );
+THREE.UVTransformNode.prototype.constructor = THREE.UVTransformNode;
+THREE.UVTransformNode.prototype.nodeType = "UVTransform";
+
+THREE.UVTransformNode.prototype.generate = function ( builder, output ) {
+
+	this.keywords[ "uvNode" ] = this.uv;
+	this.keywords[ "uvTransform" ] = this.transform;
+
+	return THREE.FunctionNode.prototype.generate.call( this, builder, output );
+
+};
+
+THREE.UVTransformNode.prototype.setUvTransform = function ( tx, ty, sx, sy, rotation, cx, cy ) {
+
+	cx = cx !== undefined ? cx : .5;
+	cy = cy !== undefined ? cy : .5;
+
+	this.transform.value.setUvTransform( tx, ty, sx, sy, rotation, cx, cy );
+
+};
+
+THREE.UVTransformNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		data.uv = this.uv.toJSON( meta ).uuid;
+		data.transform = this.transform.toJSON( meta ).uuid;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.PhongNode = function () {
+
+	THREE.GLNode.call( this );
+
+	this.color = new THREE.ColorNode( 0xEEEEEE );
+	this.specular = new THREE.ColorNode( 0x111111 );
+	this.shininess = new THREE.FloatNode( 30 );
+
+};
+
+THREE.PhongNode.prototype = Object.create( THREE.GLNode.prototype );
+THREE.PhongNode.prototype.constructor = THREE.PhongNode;
+THREE.PhongNode.prototype.nodeType = "Phong";
+
+THREE.PhongNode.prototype.build = function ( builder ) {
+
+	var material = builder.material;
+	var code;
+
+	material.define( 'PHONG' );
+	material.define( 'ALPHATEST', '0.0' );
+
+	material.requires.lights = true;
+
+	if ( builder.isShader( 'vertex' ) ) {
+
+		var transform = this.transform ? this.transform.parseAndBuildCode( builder, 'v3', { cache: 'transform' } ) : undefined;
+
+		material.mergeUniform( THREE.UniformsUtils.merge( [
+
+			THREE.UniformsLib[ "fog" ],
+			THREE.UniformsLib[ "lights" ]
+
+		] ) );
+
+		material.addVertexPars( [
+			"varying vec3 vViewPosition;",
+
+			"#ifndef FLAT_SHADED",
+
+			"	varying vec3 vNormal;",
+
+			"#endif",
+
+			"#include <common>",
+			"#include <fog_pars_vertex>",
+			"#include <morphtarget_pars_vertex>",
+			"#include <skinning_pars_vertex>",
+			"#include <shadowmap_pars_vertex>",
+			"#include <logdepthbuf_pars_vertex>"
+		].join( "\n" ) );
+
+		var output = [
+			"#include <beginnormal_vertex>",
+			"#include <morphnormal_vertex>",
+			"#include <skinbase_vertex>",
+			"#include <skinnormal_vertex>",
+			"#include <defaultnormal_vertex>",
+
+			"#ifndef FLAT_SHADED", // Normal computed with derivatives when FLAT_SHADED
+
+			"	vNormal = normalize( transformedNormal );",
+
+			"#endif",
+
+			"#include <begin_vertex>"
+		];
+
+		if ( transform ) {
+
+			output.push(
+				transform.code,
+				"transformed = " + transform.result + ";"
+			);
+
+		}
+
+		output.push(
+			"	#include <morphtarget_vertex>",
+			"	#include <skinning_vertex>",
+			"	#include <project_vertex>",
+			"	#include <fog_vertex>",
+			"	#include <logdepthbuf_vertex>",
+
+			"	vViewPosition = - mvPosition.xyz;",
+
+			"	#include <worldpos_vertex>",
+			"	#include <shadowmap_vertex>"
+		);
+
+		code = output.join( "\n" );
+
+	} else {
+
+		// parse all nodes to reuse generate codes
+
+		this.color.parse( builder, { slot: 'color' } );
+		this.specular.parse( builder );
+		this.shininess.parse( builder );
+
+		if ( this.alpha ) this.alpha.parse( builder );
+
+		if ( this.normal ) this.normal.parse( builder );
+		if ( this.normalScale && this.normal ) this.normalScale.parse( builder );
+
+		if ( this.light ) this.light.parse( builder, { cache: 'light' } );
+
+		if ( this.ao ) this.ao.parse( builder );
+		if ( this.ambient ) this.ambient.parse( builder );
+		if ( this.shadow ) this.shadow.parse( builder );
+		if ( this.emissive ) this.emissive.parse( builder, { slot: 'emissive' } );
+
+		if ( this.environment ) this.environment.parse( builder, { slot: 'environment' } );
+		if ( this.environmentAlpha && this.environment ) this.environmentAlpha.parse( builder );
+
+		// build code
+
+		var color = this.color.buildCode( builder, 'c', { slot: 'color' } );
+		var specular = this.specular.buildCode( builder, 'c' );
+		var shininess = this.shininess.buildCode( builder, 'fv1' );
+
+		var alpha = this.alpha ? this.alpha.buildCode( builder, 'fv1' ) : undefined;
+
+		var normal = this.normal ? this.normal.buildCode( builder, 'v3' ) : undefined;
+		var normalScale = this.normalScale && this.normal ? this.normalScale.buildCode( builder, 'v2' ) : undefined;
+
+		var light = this.light ? this.light.buildCode( builder, 'v3', { cache: 'light' } ) : undefined;
+
+		var ao = this.ao ? this.ao.buildCode( builder, 'fv1' ) : undefined;
+		var ambient = this.ambient ? this.ambient.buildCode( builder, 'c' ) : undefined;
+		var shadow = this.shadow ? this.shadow.buildCode( builder, 'c' ) : undefined;
+		var emissive = this.emissive ? this.emissive.buildCode( builder, 'c', { slot: 'emissive' } ) : undefined;
+
+		var environment = this.environment ? this.environment.buildCode( builder, 'c', { slot: 'environment' } ) : undefined;
+		var environmentAlpha = this.environmentAlpha && this.environment ? this.environmentAlpha.buildCode( builder, 'fv1' ) : undefined;
+
+		material.requires.transparent = alpha != undefined;
+
+		material.addFragmentPars( [
+			"#include <common>",
+			"#include <fog_pars_fragment>",
+			"#include <bsdfs>",
+			"#include <lights_pars_begin>",
+			"#include <lights_phong_pars_fragment>",
+			"#include <shadowmap_pars_fragment>",
+			"#include <logdepthbuf_pars_fragment>"
+		].join( "\n" ) );
+
+		var output = [
+			// prevent undeclared normal
+			"#include <normal_fragment_begin>",
+
+			// prevent undeclared material
+			"	BlinnPhongMaterial material;",
+
+			color.code,
+			"	vec3 diffuseColor = " + color.result + ";",
+			"	ReflectedLight reflectedLight = ReflectedLight( vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ) );",
+
+			"#include <logdepthbuf_fragment>",
+
+			specular.code,
+			"	vec3 specular = " + specular.result + ";",
+
+			shininess.code,
+			"	float shininess = max(0.0001," + shininess.result + ");",
+
+			"	float specularStrength = 1.0;" // Ignored in MaterialNode ( replace to specular )
+		];
+
+		if ( alpha ) {
+
+			output.push(
+				alpha.code,
+				'if ( ' + alpha.result + ' <= ALPHATEST ) discard;'
+			);
+
+		}
+
+		if ( normal ) {
+
+			builder.include( 'perturbNormal2Arb' );
+
+			output.push( normal.code );
+
+			if ( normalScale ) output.push( normalScale.code );
+
+			output.push(
+				'normal = perturbNormal2Arb(-vViewPosition,normal,' +
+				normal.result + ',' +
+				new THREE.UVNode().build( builder, 'v2' ) + ',' +
+				( normalScale ? normalScale.result : 'vec2( 1.0 )' ) + ');'
+			);
+
+		}
+
+		// optimization for now
+
+		output.push( 'material.diffuseColor = ' + ( light ? 'vec3( 1.0 )' : 'diffuseColor' ) + ';' );
+
+		output.push(
+			// accumulation
+			'material.specularColor = specular;',
+			'material.specularShininess = shininess;',
+			'material.specularStrength = specularStrength;',
+
+			"#include <lights_fragment_begin>",
+			"#include <lights_fragment_end>"
+		);
+
+		if ( light ) {
+
+			output.push(
+				light.code,
+				"reflectedLight.directDiffuse = " + light.result + ";"
+			);
+
+			// apply color
+
+			output.push(
+				"reflectedLight.directDiffuse *= diffuseColor;",
+				"reflectedLight.indirectDiffuse *= diffuseColor;"
+			);
+
+		}
+
+		if ( ao ) {
+
+			output.push(
+				ao.code,
+				"reflectedLight.indirectDiffuse *= " + ao.result + ";"
+			);
+
+		}
+
+		if ( ambient ) {
+
+			output.push(
+				ambient.code,
+				"reflectedLight.indirectDiffuse += " + ambient.result + ";"
+			);
+
+		}
+
+		if ( shadow ) {
+
+			output.push(
+				shadow.code,
+				"reflectedLight.directDiffuse *= " + shadow.result + ";",
+				"reflectedLight.directSpecular *= " + shadow.result + ";"
+			);
+
+		}
+
+		if ( emissive ) {
+
+			output.push(
+				emissive.code,
+				"reflectedLight.directDiffuse += " + emissive.result + ";"
+			);
+
+		}
+
+		output.push( "vec3 outgoingLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse + reflectedLight.directSpecular;" );
+
+		if ( environment ) {
+
+			output.push( environment.code );
+
+			if ( environmentAlpha ) {
+
+				output.push(
+					environmentAlpha.code,
+					"outgoingLight = mix( outgoingLight, " + environment.result + ", " + environmentAlpha.result + " );"
+				);
+
+			} else {
+
+				output.push( "outgoingLight = " + environment.result + ";" );
+
+			}
+
+		}
+
+		if ( alpha ) {
+
+			output.push( "gl_FragColor = vec4( outgoingLight, " + alpha.result + " );" );
+
+		} else {
+
+			output.push( "gl_FragColor = vec4( outgoingLight, 1.0 );" );
+
+		}
+
+		output.push(
+			"#include <premultiplied_alpha_fragment>",
+			"#include <tonemapping_fragment>",
+			"#include <encodings_fragment>",
+			"#include <fog_fragment>"
+		);
+
+		code = output.join( "\n" );
+
+	}
+
+	return code;
+
+};
+
+
+THREE.PhongNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		// vertex
+
+		if ( this.transform ) data.transform = this.transform.toJSON( meta ).uuid;
+
+		// fragment
+
+		data.color = this.color.toJSON( meta ).uuid;
+		data.specular = this.specular.toJSON( meta ).uuid;
+		data.shininess = this.shininess.toJSON( meta ).uuid;
+
+		if ( this.alpha ) data.alpha = this.alpha.toJSON( meta ).uuid;
+
+		if ( this.normal ) data.normal = this.normal.toJSON( meta ).uuid;
+		if ( this.normalScale ) data.normalScale = this.normalScale.toJSON( meta ).uuid;
+
+		if ( this.light ) data.light = this.light.toJSON( meta ).uuid;
+
+		if ( this.ao ) data.ao = this.ao.toJSON( meta ).uuid;
+		if ( this.ambient ) data.ambient = this.ambient.toJSON( meta ).uuid;
+		if ( this.shadow ) data.shadow = this.shadow.toJSON( meta ).uuid;
+		if ( this.emissive ) data.emissive = this.emissive.toJSON( meta ).uuid;
+
+		if ( this.environment ) data.environment = this.environment.toJSON( meta ).uuid;
+		if ( this.environmentAlpha ) data.environmentAlpha = this.environmentAlpha.toJSON( meta ).uuid;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.PhongNodeMaterial = function () {
+
+	this.node = new THREE.PhongNode();
+
+	THREE.NodeMaterial.call( this, this.node, this.node );
+
+	this.type = "PhongNodeMaterial";
+
+};
+
+THREE.PhongNodeMaterial.prototype = Object.create( THREE.NodeMaterial.prototype );
+THREE.PhongNodeMaterial.prototype.constructor = THREE.PhongNodeMaterial;
+
+THREE.NodeMaterial.addShortcuts( THREE.PhongNodeMaterial.prototype, 'node',
+	[ 'color', 'alpha', 'specular', 'shininess', 'normal', 'normalScale', 'emissive', 'ambient', 'light', 'shadow', 'ao', 'environment', 'environmentAlpha', 'transform' ] );
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.StandardNode = function () {
+
+	THREE.GLNode.call( this );
+
+	this.color = new THREE.ColorNode( 0xEEEEEE );
+	this.roughness = new THREE.FloatNode( 0.5 );
+	this.metalness = new THREE.FloatNode( 0.5 );
+
+};
+
+THREE.StandardNode.prototype = Object.create( THREE.GLNode.prototype );
+THREE.StandardNode.prototype.constructor = THREE.StandardNode;
+THREE.StandardNode.prototype.nodeType = "Standard";
+
+THREE.StandardNode.prototype.build = function ( builder ) {
+
+	var material = builder.material;
+	var code;
+
+	material.define( 'PHYSICAL' );
+
+	if ( ! this.clearCoat && ! this.clearCoatRoughness ) material.define( 'STANDARD' );
+
+	material.define( 'ALPHATEST', '0.0' );
+
+	material.requires.lights = true;
+
+	material.extensions.shaderTextureLOD = true;
+
+	if ( builder.isShader( 'vertex' ) ) {
+
+		var transform = this.transform ? this.transform.parseAndBuildCode( builder, 'v3', { cache: 'transform' } ) : undefined;
+
+		material.mergeUniform( THREE.UniformsUtils.merge( [
+
+			THREE.UniformsLib[ "fog" ],
+			THREE.UniformsLib[ "lights" ]
+
+		] ) );
+
+		material.addVertexPars( [
+			"varying vec3 vViewPosition;",
+
+			"#ifndef FLAT_SHADED",
+
+			"	varying vec3 vNormal;",
+
+			"#endif",
+
+			"#include <common>",
+			"#include <fog_pars_vertex>",
+			"#include <morphtarget_pars_vertex>",
+			"#include <skinning_pars_vertex>",
+			"#include <shadowmap_pars_vertex>",
+			"#include <logdepthbuf_pars_vertex>"
+
+		].join( "\n" ) );
+
+		var output = [
+			"#include <beginnormal_vertex>",
+			"#include <morphnormal_vertex>",
+			"#include <skinbase_vertex>",
+			"#include <skinnormal_vertex>",
+			"#include <defaultnormal_vertex>",
+			"#include <logdepthbuf_pars_vertex>",
+			"#include <logdepthbuf_pars_vertex>",
+			"#include <logdepthbuf_pars_vertex>",
+
+			"#ifndef FLAT_SHADED", // Normal computed with derivatives when FLAT_SHADED
+
+			"	vNormal = normalize( transformedNormal );",
+
+			"#endif",
+
+			"#include <begin_vertex>"
+		];
+
+		if ( transform ) {
+
+			output.push(
+				transform.code,
+				"transformed = " + transform.result + ";"
+			);
+
+		}
+
+		output.push(
+			"#include <morphtarget_vertex>",
+			"#include <skinning_vertex>",
+			"#include <project_vertex>",
+			"#include <fog_vertex>",
+			"#include <logdepthbuf_vertex>",
+
+			"	vViewPosition = - mvPosition.xyz;",
+
+			"#include <worldpos_vertex>",
+			"#include <shadowmap_vertex>"
+		);
+
+		code = output.join( "\n" );
+
+	} else {
+
+		// blur textures for PBR effect
+
+		var requires = {
+			bias: new THREE.RoughnessToBlinnExponentNode(),
+			offsetU: 0,
+			offsetV: 0
+		};
+
+		var useClearCoat = ! material.isDefined( 'STANDARD' );
+
+		// parse all nodes to reuse generate codes
+
+		this.color.parse( builder, { slot: 'color' } );
+		this.roughness.parse( builder );
+		this.metalness.parse( builder );
+
+		if ( this.alpha ) this.alpha.parse( builder );
+
+		if ( this.normal ) this.normal.parse( builder );
+		if ( this.normalScale && this.normal ) this.normalScale.parse( builder );
+
+		if ( this.clearCoat ) this.clearCoat.parse( builder );
+		if ( this.clearCoatRoughness ) this.clearCoatRoughness.parse( builder );
+
+		if ( this.reflectivity ) this.reflectivity.parse( builder );
+
+		if ( this.light ) this.light.parse( builder, { cache: 'light' } );
+
+		if ( this.ao ) this.ao.parse( builder );
+		if ( this.ambient ) this.ambient.parse( builder );
+		if ( this.shadow ) this.shadow.parse( builder );
+		if ( this.emissive ) this.emissive.parse( builder, { slot: 'emissive' } );
+
+		if ( this.environment ) this.environment.parse( builder, { cache: 'env', requires: requires, slot: 'environment' } ); // isolate environment from others inputs ( see TextureNode, CubeTextureNode )
+
+		// build code
+
+		var color = this.color.buildCode( builder, 'c', { slot: 'color' } );
+		var roughness = this.roughness.buildCode( builder, 'fv1' );
+		var metalness = this.metalness.buildCode( builder, 'fv1' );
+
+		var alpha = this.alpha ? this.alpha.buildCode( builder, 'fv1' ) : undefined;
+
+		var normal = this.normal ? this.normal.buildCode( builder, 'v3' ) : undefined;
+		var normalScale = this.normalScale && this.normal ? this.normalScale.buildCode( builder, 'v2' ) : undefined;
+
+		var clearCoat = this.clearCoat ? this.clearCoat.buildCode( builder, 'fv1' ) : undefined;
+		var clearCoatRoughness = this.clearCoatRoughness ? this.clearCoatRoughness.buildCode( builder, 'fv1' ) : undefined;
+
+		var reflectivity = this.reflectivity ? this.reflectivity.buildCode( builder, 'fv1' ) : undefined;
+
+		var light = this.light ? this.light.buildCode( builder, 'v3', { cache: 'light' } ) : undefined;
+
+		var ao = this.ao ? this.ao.buildCode( builder, 'fv1' ) : undefined;
+		var ambient = this.ambient ? this.ambient.buildCode( builder, 'c' ) : undefined;
+		var shadow = this.shadow ? this.shadow.buildCode( builder, 'c' ) : undefined;
+		var emissive = this.emissive ? this.emissive.buildCode( builder, 'c', { slot: 'emissive' } ) : undefined;
+
+		var environment = this.environment ? this.environment.buildCode( builder, 'c', { cache: 'env', requires: requires, slot: 'environment' } ) : undefined;
+
+		var clearCoatEnv = useClearCoat && environment ? this.environment.buildCode( builder, 'c', { cache: 'clearCoat', requires: requires, slot: 'environment' } ) : undefined;
+
+		material.requires.transparent = alpha != undefined;
+
+		material.addFragmentPars( [
+
+			"varying vec3 vViewPosition;",
+
+			"#ifndef FLAT_SHADED",
+
+			"	varying vec3 vNormal;",
+
+			"#endif",
+
+			"#include <common>",
+			"#include <fog_pars_fragment>",
+			"#include <bsdfs>",
+			"#include <lights_pars_begin>",
+			"#include <lights_physical_pars_fragment>",
+			"#include <shadowmap_pars_fragment>",
+			"#include <logdepthbuf_pars_fragment>",
+			"#include <logdepthbuf_vertex>"
+		].join( "\n" ) );
+
+		var output = [
+			// prevent undeclared normal
+			"	#include <normal_fragment_begin>",
+
+			// prevent undeclared material
+			"	PhysicalMaterial material;",
+			"	material.diffuseColor = vec3( 1.0 );",
+
+			color.code,
+			"	vec3 diffuseColor = " + color.result + ";",
+			"	ReflectedLight reflectedLight = ReflectedLight( vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ), vec3( 0.0 ) );",
+
+			"#include <logdepthbuf_fragment>",
+
+			roughness.code,
+			"	float roughnessFactor = " + roughness.result + ";",
+
+			metalness.code,
+			"	float metalnessFactor = " + metalness.result + ";"
+		];
+
+		if ( alpha ) {
+
+			output.push(
+				alpha.code,
+				'if ( ' + alpha.result + ' <= ALPHATEST ) discard;'
+			);
+
+		}
+
+		if ( normal ) {
+
+			builder.include( 'perturbNormal2Arb' );
+
+			output.push( normal.code );
+
+			if ( normalScale ) output.push( normalScale.code );
+
+			output.push(
+				'normal = perturbNormal2Arb(-vViewPosition,normal,' +
+				normal.result + ',' +
+				new THREE.UVNode().build( builder, 'v2' ) + ',' +
+				( normalScale ? normalScale.result : 'vec2( 1.0 )' ) + ');'
+			);
+
+		}
+
+		// optimization for now
+
+		output.push( 'material.diffuseColor = ' + ( light ? 'vec3( 1.0 )' : 'diffuseColor * (1.0 - metalnessFactor)' ) + ';' );
+
+		output.push(
+			// accumulation
+			'material.specularRoughness = clamp( roughnessFactor, DEFAULT_SPECULAR_COEFFICIENT, 1.0 );' // disney's remapping of [ 0, 1 ] roughness to [ 0.001, 1 ]
+		);
+
+		if ( clearCoat ) {
+
+			output.push(
+				clearCoat.code,
+				'material.clearCoat = saturate( ' + clearCoat.result + ' );'
+			);
+
+		} else if ( useClearCoat ) {
+
+			output.push( 'material.clearCoat = 0.0;' );
+
+		}
+
+		if ( clearCoatRoughness ) {
+
+			output.push(
+				clearCoatRoughness.code,
+				'material.clearCoatRoughness = clamp( ' + clearCoatRoughness.result + ', DEFAULT_SPECULAR_COEFFICIENT, 1.0 );'
+			);
+
+		} else if ( useClearCoat ) {
+
+			output.push( 'material.clearCoatRoughness = 0.0;' );
+
+		}
+
+		if ( reflectivity ) {
+
+			output.push(
+				reflectivity.code,
+				'material.specularColor = mix( vec3( MAXIMUM_SPECULAR_COEFFICIENT * pow2( ' + reflectivity.result + ' ) ), diffuseColor, metalnessFactor );'
+			);
+
+		} else {
+
+			output.push(
+				'material.specularColor = mix( vec3( DEFAULT_SPECULAR_COEFFICIENT ), diffuseColor, metalnessFactor );'
+			);
+
+		}
+
+		output.push(
+			"#include <lights_fragment_begin>",
+			"#include <lights_fragment_end>"
+		);
+
+		if ( light ) {
+
+			output.push(
+				light.code,
+				"reflectedLight.directDiffuse = " + light.result + ";"
+			);
+
+			// apply color
+
+			output.push(
+				"diffuseColor *= 1.0 - metalnessFactor;",
+
+				"reflectedLight.directDiffuse *= diffuseColor;",
+				"reflectedLight.indirectDiffuse *= diffuseColor;"
+			);
+
+		}
+
+		if ( ao ) {
+
+			output.push(
+				ao.code,
+				"reflectedLight.indirectDiffuse *= " + ao.result + ";",
+				"float dotNV = saturate( dot( geometry.normal, geometry.viewDir ) );",
+				"reflectedLight.indirectSpecular *= computeSpecularOcclusion( dotNV, " + ao.result + ", material.specularRoughness );"
+			);
+
+		}
+
+		if ( ambient ) {
+
+			output.push(
+				ambient.code,
+				"reflectedLight.indirectDiffuse += " + ambient.result + ";"
+			);
+
+		}
+
+		if ( shadow ) {
+
+			output.push(
+				shadow.code,
+				"reflectedLight.directDiffuse *= " + shadow.result + ";",
+				"reflectedLight.directSpecular *= " + shadow.result + ";"
+			);
+
+		}
+
+		if ( emissive ) {
+
+			output.push(
+				emissive.code,
+				"reflectedLight.directDiffuse += " + emissive.result + ";"
+			);
+
+		}
+
+		if ( environment ) {
+
+			output.push( environment.code );
+
+			if ( clearCoatEnv ) {
+
+				output.push(
+					clearCoatEnv.code,
+					"clearCoatRadiance += " + clearCoatEnv.result + ";"
+				);
+
+			}
+
+			output.push( "RE_IndirectSpecular(" + environment.result + ", clearCoatRadiance, geometry, material, reflectedLight );" );
+
+		}
+
+		output.push( "vec3 outgoingLight = reflectedLight.directDiffuse + reflectedLight.indirectDiffuse + reflectedLight.directSpecular + reflectedLight.indirectSpecular;" );
+
+		if ( alpha ) {
+
+			output.push( "gl_FragColor = vec4( outgoingLight, " + alpha.result + " );" );
+
+		} else {
+
+			output.push( "gl_FragColor = vec4( outgoingLight, 1.0 );" );
+
+		}
+
+		output.push(
+			"#include <premultiplied_alpha_fragment>",
+			"#include <tonemapping_fragment>",
+			"#include <encodings_fragment>",
+			"#include <fog_fragment>"
+		);
+
+		code = output.join( "\n" );
+
+	}
+
+	return code;
+
+};
+
+THREE.StandardNode.prototype.toJSON = function ( meta ) {
+
+	var data = this.getJSONNode( meta );
+
+	if ( ! data ) {
+
+		data = this.createJSONNode( meta );
+
+		// vertex
+
+		if ( this.transform ) data.transform = this.transform.toJSON( meta ).uuid;
+
+		// fragment
+
+		data.color = this.color.toJSON( meta ).uuid;
+		data.roughness = this.roughness.toJSON( meta ).uuid;
+		data.metalness = this.metalness.toJSON( meta ).uuid;
+
+		if ( this.alpha ) data.alpha = this.alpha.toJSON( meta ).uuid;
+
+		if ( this.normal ) data.normal = this.normal.toJSON( meta ).uuid;
+		if ( this.normalScale ) data.normalScale = this.normalScale.toJSON( meta ).uuid;
+
+		if ( this.clearCoat ) data.clearCoat = this.clearCoat.toJSON( meta ).uuid;
+		if ( this.clearCoatRoughness ) data.clearCoatRoughness = this.clearCoatRoughness.toJSON( meta ).uuid;
+
+		if ( this.reflectivity ) data.reflectivity = this.reflectivity.toJSON( meta ).uuid;
+
+		if ( this.light ) data.light = this.light.toJSON( meta ).uuid;
+
+		if ( this.ao ) data.ao = this.ao.toJSON( meta ).uuid;
+		if ( this.ambient ) data.ambient = this.ambient.toJSON( meta ).uuid;
+		if ( this.shadow ) data.shadow = this.shadow.toJSON( meta ).uuid;
+		if ( this.emissive ) data.emissive = this.emissive.toJSON( meta ).uuid;
+
+		if ( this.environment ) data.environment = this.environment.toJSON( meta ).uuid;
+
+	}
+
+	return data;
+
+};
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.StandardNodeMaterial = function () {
+
+	this.node = new THREE.StandardNode();
+
+	THREE.NodeMaterial.call( this, this.node, this.node );
+
+	this.type = "StandardNodeMaterial";
+
+};
+
+THREE.StandardNodeMaterial.prototype = Object.create( THREE.NodeMaterial.prototype );
+THREE.StandardNodeMaterial.prototype.constructor = THREE.StandardNodeMaterial;
+
+THREE.NodeMaterial.addShortcuts( THREE.StandardNodeMaterial.prototype, 'node',
+	[ 'color', 'alpha', 'roughness', 'metalness', 'reflectivity', 'clearCoat', 'clearCoatRoughness', 'normal', 'normalScale', 'emissive', 'ambient', 'light', 'shadow', 'ao', 'environment', 'transform' ] );
+
+/**
+ * @author sunag / http://www.sunag.com.br/
+ */
+
+THREE.NodeMaterialLoader = function ( manager, library ) {
+
+	this.manager = ( manager !== undefined ) ? manager : THREE.DefaultLoadingManager;
+
+	this.nodes = {};
+	this.materials = {};
+	this.passes = {};
+	this.names = {};
+	this.library = library || {};
+
+};
+
+THREE.NodeMaterialLoaderUtils = {
+
+	replaceUUIDObject: function ( object, uuid, value, recursive ) {
+
+		recursive = recursive !== undefined ? recursive : true;
+
+		if ( typeof uuid === "object" ) uuid = uuid.uuid;
+
+		if ( typeof object === "object" ) {
+
+			var keys = Object.keys( object );
+
+			for ( var i = 0; i < keys.length; i ++ ) {
+
+				var key = keys[ i ];
+
+				if ( recursive ) {
+
+					object[ key ] = this.replaceUUIDObject( object[ key ], uuid, value );
+
+				}
+
+				if ( key === uuid ) {
+
+					object[ uuid ] = object[ key ];
+
+					delete object[ key ];
+
+				}
+
+			}
+
+		}
+
+		return object === uuid ? value : object;
+
+	},
+
+	replaceUUID: function ( json, uuid, value ) {
+
+		this.replaceUUIDObject( json, uuid, value, false );
+		this.replaceUUIDObject( json.nodes, uuid, value );
+		this.replaceUUIDObject( json.materials, uuid, value );
+		this.replaceUUIDObject( json.passes, uuid, value );
+		this.replaceUUIDObject( json.library, uuid, value, false );
+
+		return json;
+
+	}
+
+};
+
+Object.assign( THREE.NodeMaterialLoader.prototype, {
+
+	load: function ( url, onLoad, onProgress, onError ) {
+
+		var scope = this;
+
+		var loader = new THREE.FileLoader( scope.manager );
+		loader.load( url, function ( text ) {
+
+			onLoad( scope.parse( JSON.parse( text ) ) );
+
+		}, onProgress, onError );
+
+		return this;
+
+	},
+
+	getObjectByName: function ( uuid ) {
+
+		return this.names[ uuid ];
+
+	},
+
+	getObjectById: function ( uuid ) {
+
+		return this.library[ uuid ] || this.nodes[ uuid ] || this.names[ uuid ];
+
+	},
+
+	getNode: function ( uuid ) {
+
+		var object = this.getObjectById( uuid );
+
+		if ( ! object ) {
+
+			console.warn( "Node \"" + uuid + "\" not found." );
+
+		}
+
+		return object;
+
+	},
+
+	parse: function ( json ) {
+
+		var uuid, node, object, prop, i;
+
+		for ( uuid in json.nodes ) {
+
+			node = json.nodes[ uuid ];
+
+			object = new THREE[ node.type ]();
+
+			if ( node.name ) {
+
+				object.name = node.name;
+
+				this.names[ object.name ] = object;
+
+			} else {
+
+				// ignore "uniform" shader input ( for optimization )
+				object.readonly = true;
+
+			}
+
+			if ( node.readonly !== undefined ) object.readonly = node.readonly;
+
+			this.nodes[ uuid ] = object;
+
+		}
+
+		for ( uuid in json.materials ) {
+
+			node = json.materials[ uuid ];
+
+			object = new THREE[ node.type ]();
+
+			if ( node.name ) {
+
+				object.name = node.name;
+
+				this.names[ object.name ] = object;
+
+			}
+
+			this.materials[ uuid ] = object;
+
+		}
+
+		for ( uuid in json.passes ) {
+
+			node = json.passes[ uuid ];
+
+			object = new THREE[ node.type ]();
+
+			if ( node.name ) {
+
+				object.name = node.name;
+
+				this.names[ object.name ] = object;
+
+			}
+
+			this.passes[ uuid ] = object;
+
+		}
+
+		if ( json.material ) this.material = this.materials[ uuid ];
+		if ( json.pass ) this.pass = this.passes[ uuid ];
+
+		for ( uuid in json.nodes ) {
+
+			node = json.nodes[ uuid ];
+			object = this.nodes[ uuid ];
+
+			switch ( node.type ) {
+
+				case "FloatNode":
+
+					object.number = node.number;
+
+					break;
+
+				case "ColorNode":
+
+					object.value.copy( node );
+
+					break;
+
+				case "Vector2Node":
+
+					object.x = node.x;
+					object.y = node.y;
+
+					break;
+
+
+				case "Vector3Node":
+
+					object.x = node.x;
+					object.y = node.y;
+					object.z = node.z;
+
+					break;
+
+				case "Vector4Node":
+
+					object.x = node.x;
+					object.y = node.y;
+					object.z = node.z;
+					object.w = node.w;
+
+					break;
+
+				case "Matrix3Node":
+				case "Matrix4Node":
+
+					object.value.fromArray( node.elements );
+
+					break;
+
+				case "OperatorNode":
+
+					object.a = this.getNode( node.a );
+					object.b = this.getNode( node.b );
+					object.op = node.op;
+
+					break;
+
+				case "Math1Node":
+
+					object.a = this.getNode( node.a );
+					object.method = node.method;
+
+					break;
+
+				case "Math2Node":
+
+					object.a = this.getNode( node.a );
+					object.b = this.getNode( node.b );
+					object.method = node.method;
+
+					break;
+
+				case "Math3Node":
+
+					object.a = this.getNode( node.a );
+					object.b = this.getNode( node.b );
+					object.c = this.getNode( node.c );
+					object.method = node.method;
+
+					break;
+
+				case "UVNode":
+				case "ColorsNode":
+
+					object.index = node.index;
+
+					break;
+
+
+				case "LuminanceNode":
+
+					object.rgb = this.getNode( node.rgb );
+
+					break;
+
+				case "PositionNode":
+				case "NormalNode":
+				case "ReflectNode":
+				case "LightNode":
+
+					object.scope = node.scope;
+
+					break;
+
+				case "SwitchNode":
+
+					object.node = this.getNode( node.node );
+					object.components = node.components;
+
+					break;
+
+				case "JoinNode":
+
+					for ( prop in node.inputs ) {
+
+						object[ prop ] = this.getNode( node.inputs[ prop ] );
+
+					}
+
+					break;
+
+				case "CameraNode":
+
+					object.setScope( node.scope );
+
+					if ( node.camera ) object.setCamera( this.getNode( node.camera ) );
+
+					switch ( node.scope ) {
+
+						case THREE.CameraNode.DEPTH:
+
+							object.near.number = node.near;
+							object.far.number = node.far;
+
+							break;
+
+					}
+
+					break;
+
+				case "ColorAdjustmentNode":
+
+					object.rgb = this.getNode( node.rgb );
+					object.adjustment = this.getNode( node.adjustment );
+					object.method = node.method;
+
+					break;
+
+				case "UVTransformNode":
+
+					object.uv = this.getNode( node.uv );
+					object.transform = this.getNode( node.transform );
+
+					break;
+
+				case "BumpNode":
+
+					object.value = this.getNode( node.value );
+					object.coord = this.getNode( node.coord );
+					object.scale = this.getNode( node.scale );
+
+					break;
+
+				case "BlurNode":
+
+					object.value = this.getNode( node.value );
+					object.coord = this.getNode( node.coord );
+					object.scale = this.getNode( node.scale );
+
+					object.value = this.getNode( node.value );
+					object.coord = this.getNode( node.coord );
+					object.radius = this.getNode( node.radius );
+
+					if ( node.size !== undefined ) object.size = new THREE.Vector2( node.size.x, node.size.y );
+
+					object.blurX = node.blurX;
+					object.blurY = node.blurY;
+
+					break;
+
+				case "ResolutionNode":
+
+					object.renderer = this.getNode( node.renderer );
+
+					break;
+
+				case "ScreenUVNode":
+
+					object.resolution = this.getNode( node.resolution );
+
+					break;
+
+				case "VelocityNode":
+
+					if ( node.target ) object.setTarget( this.getNode( node.target ) );
+					object.setParams( node.params );
+
+					break;
+
+				case "TimerNode":
+
+					object.scope = node.scope;
+					object.scale = node.scale;
+
+					break;
+
+				case "ConstNode":
+
+					object.name = node.name;
+					object.type = node.out;
+					object.value = node.value;
+					object.useDefine = node.useDefine === true;
+
+					break;
+
+				case "AttributeNode":
+				case "VarNode":
+
+					object.type = node.out;
+
+					break;
+
+
+				case "ReflectorNode":
+
+					object.setMirror( this.getNode( node.mirror ) );
+
+					if ( node.offset ) object.offset = this.getNode( node.offset );
+
+					break;
+
+				case "NoiseNode":
+
+					object.coord = this.getNode( node.coord );
+
+					break;
+
+				case "FunctionNode":
+
+					object.isMethod = node.isMethod;
+					object.useKeywords = node.useKeywords;
+
+					object.extensions = node.extensions;
+					object.keywords = {};
+
+					for ( prop in node.keywords ) {
+
+						object.keywords[ prop ] = this.getNode( node.keywords[ prop ] );
+
+					}
+
+					if ( node.includes ) {
+
+						for ( i = 0; i < node.includes.length; i ++ ) {
+
+							object.includes.push( this.getNode( node.includes[ i ] ) );
+
+						}
+
+					}
+
+					object.eval( node.src, object.includes, object.extensions, object.keywords );
+
+					if ( ! object.isMethod ) object.type = node.out;
+
+					break;
+
+				case "FunctionCallNode":
+
+					for ( prop in node.inputs ) {
+
+						object.inputs[ prop ] = this.getNode( node.inputs[ prop ] );
+
+					}
+
+					object.value = this.getNode( node.value );
+
+					break;
+
+				case "TextureNode":
+				case "CubeTextureNode":
+				case "ScreenNode":
+
+					if ( node.value ) object.value = this.getNode( node.value );
+
+					object.coord = this.getNode( node.coord );
+
+					if ( node.bias ) object.bias = this.getNode( node.bias );
+					if ( object.project !== undefined ) object.project = node.project;
+
+					break;
+
+				case "RoughnessToBlinnExponentNode":
+					break;
+
+				case "RawNode":
+
+					object.value = this.getNode( node.value );
+
+					break;
+
+				case "StandardNode":
+				case "PhongNode":
+				case "SpriteNode":
+
+					object.color = this.getNode( node.color );
+
+					if ( node.alpha ) object.alpha = this.getNode( node.alpha );
+
+					if ( node.specular ) object.specular = this.getNode( node.specular );
+					if ( node.shininess ) object.shininess = this.getNode( node.shininess );
+
+					if ( node.roughness ) object.roughness = this.getNode( node.roughness );
+					if ( node.metalness ) object.metalness = this.getNode( node.metalness );
+
+					if ( node.reflectivity ) object.reflectivity = this.getNode( node.reflectivity );
+
+					if ( node.clearCoat ) object.clearCoat = this.getNode( node.clearCoat );
+					if ( node.clearCoatRoughness ) object.clearCoatRoughness = this.getNode( node.clearCoatRoughness );
+
+					if ( node.normal ) object.normal = this.getNode( node.normal );
+					if ( node.normalScale ) object.normalScale = this.getNode( node.normalScale );
+
+					if ( node.emissive ) object.emissive = this.getNode( node.emissive );
+					if ( node.ambient ) object.ambient = this.getNode( node.ambient );
+
+					if ( node.shadow ) object.shadow = this.getNode( node.shadow );
+					if ( node.light ) object.light = this.getNode( node.light );
+
+					if ( node.ao ) object.ao = this.getNode( node.ao );
+
+					if ( node.environment ) object.environment = this.getNode( node.environment );
+					if ( node.environmentAlpha ) object.environmentAlpha = this.getNode( node.environmentAlpha );
+
+					if ( node.transform ) object.transform = this.getNode( node.transform );
+
+					if ( node.spherical === false ) object.spherical = false;
+
+					break;
+
+				default:
+
+					console.warn( node.type, "not supported." );
+
+			}
+
+		}
+
+		for ( uuid in json.materials ) {
+
+			node = json.materials[ uuid ];
+			object = this.materials[ uuid ];
+
+			if ( node.name !== undefined ) object.name = node.name;
+
+			if ( node.blending !== undefined ) object.blending = node.blending;
+			if ( node.flatShading !== undefined ) object.flatShading = node.flatShading;
+			if ( node.side !== undefined ) object.side = node.side;
+
+			object.depthFunc = node.depthFunc;
+			object.depthTest = node.depthTest;
+			object.depthWrite = node.depthWrite;
+
+			if ( node.wireframe !== undefined ) object.wireframe = node.wireframe;
+			if ( node.wireframeLinewidth !== undefined ) object.wireframeLinewidth = node.wireframeLinewidth;
+			if ( node.wireframeLinecap !== undefined ) object.wireframeLinecap = node.wireframeLinecap;
+			if ( node.wireframeLinejoin !== undefined ) object.wireframeLinejoin = node.wireframeLinejoin;
+
+			if ( node.skinning !== undefined ) object.skinning = node.skinning;
+			if ( node.morphTargets !== undefined ) object.morphTargets = node.morphTargets;
+
+			if ( node.visible !== undefined ) object.visible = node.visible;
+			if ( node.userData !== undefined ) object.userData = node.userData;
+
+			object.vertex = this.getNode( node.vertex );
+			object.fragment = this.getNode( node.fragment );
+
+			if ( object.vertex === object.fragment ) {
+
+				// replace main node
+
+				object.node = object.vertex;
+
+			}
+
+			object.build();
+
+			if ( node.fog !== undefined ) object.fog = node.fog;
+			if ( node.lights !== undefined ) object.lights = node.lights;
+
+			if ( node.transparent !== undefined ) object.transparent = node.transparent;
+
+		}
+
+		for ( uuid in json.passes ) {
+
+			node = json.passes[ uuid ];
+			object = this.passes[ uuid ];
+
+			object.value = this.getNode( node.value );
+
+			object.build();
+
+		}
+
+		return this.material || this.pass || this;
+
+	}
+
+} );
+
+/**
  * @author Nikos M. / https://github.com/foo123/
  */
 

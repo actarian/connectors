@@ -8,39 +8,33 @@
         return;
     }
 
-    var btnAdd = document.querySelector('.btn-add');
-    var btnRemove = document.querySelector('.btn-remove');
-    var btnFlip = document.querySelector('.btn-flip');
     var container = document.querySelector('.editor');
+
     var w = container.offsetWidth,
         h = container.offsetHeight;
 
+    var options = {
+        down: false,
+        moved: 0,
+    };
+
+    var raycaster = new THREE.Raycaster();
+
     var forge = new Forge();
 
-    var renderer = new THREE.WebGLRenderer({
-        alpha: true,
-        antialias: true,
-    });
-    renderer.setSize(w, h);
-    container.appendChild(renderer.domElement);
-
-    var camera = new THREE.PerspectiveCamera(45, w / h, 1, 50000);
-    // camera.position.set(0, 20, 40);
-    // camera.lookAt(0, 0, 0);
-    // controls.update() must be called after any manual changes to the camera's transform
-    // var controls;
-    // var controls = new THREE.OrbitControls(camera);
-    // controls.update();
-
-    var scene = new THREE.Scene();
+    var renderer = addRenderer();
 
     var library = new Library(renderer);
+
+    var camera = new THREE.PerspectiveCamera(45, w / h, 1, 50000);
+
+    var scene = new THREE.Scene();
 
     var lights = addLights(scene);
 
     var floor = addFloor(scene);
 
-    var combiner = new Combiner(scene, library);
+    var combiner = new Combiner(scene);
 
     var orbiter = new Orbiter(scene, camera);
 
@@ -64,9 +58,46 @@
         // renderer.render(scene, camera);
     }
 
+    function snapshot() {
+        if (options.snapshot === true) {
+            options.snapshot = false;
+            /*
+            Snapshot.post(scope.saber.code, renderer.domElement.toDataURL('image/jpeg', 0.95)).then(function (share) {
+                scope.$root.$broadcast('onSocialPictureReady', share);
+            });
+            */
+        }
+    }
+
     function animate() {
         render();
-        requestAnimationFrame(animate);
+        snapshot();
+        options.requestId = window.requestAnimationFrame(animate, renderer.domElement);
+    }
+
+    function play() {
+        if (!options.requestId) {
+            animate();
+        }
+    }
+
+    function pause() {
+        if (options.requestId) {
+            window.cancelAnimationFrame(options.requestId);
+            options.requestId = false;
+        }
+    }
+
+    function addRenderer() {
+        var renderer = new THREE.WebGLRenderer({
+            alpha: true,
+            antialias: true,
+        });
+        renderer.setClearColor(0x101010);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(w, h);
+        container.appendChild(renderer.domElement);
+        return renderer;
     }
 
     function addLights(scene) {
@@ -119,6 +150,7 @@
         if (!combiner.busy()) {
             forge.load(function (geometry, materials) {
                 if (effects) effects.unselect();
+                materials = library.updateMaterials(materials, null, null); // finish, secondaryFinish
                 var item = combiner.add(geometry, materials);
                 orbiter.fit(combiner);
                 combiner.entering++;
@@ -142,6 +174,16 @@
         });
     }
 
+    function onFinish() {
+        combiner.selectedModel(function (model) {
+            model.material = library.setFinish(model.material, null);
+        });
+    }
+
+    function onFloor() {
+        library.setNextFloor();
+    }
+
     function onResize() {
         w = container.offsetWidth;
         h = container.offsetHeight;
@@ -152,12 +194,8 @@
         if (effects) effects.resize(w, h);
     }
 
-    var raycaster = new THREE.Raycaster();
-    var down;
-    var moved = 0;
-
     function onDown(e) {
-        down = getTouch(e);
+        var down = getTouch(e);
         down.relativeTo(container);
         down.mx = down.x;
         down.startDragAngle = orbiter.dragAngle;
@@ -180,6 +218,7 @@
             if (effects) effects.unselect();
         }
         orbiter.fit(combiner);
+        options.down = down;
         /*
         down.index = i;
         down.item = value;
@@ -188,13 +227,14 @@
     }
 
     function onMove(e) {
-        moved++;
+        options.moved++;
         var pow = 1; // 0.001;
         if (e.type === 'touchmove') {
             e.stopPropagation();
             e.preventDefault();
             pow *= 4;
         }
+        var down = options.down;
         if (down) {
             var move = getTouch(e);
             move.relativeTo(container);
@@ -232,6 +272,8 @@
     }
 
     function onUp(e) {
+        var down = options.down;
+        var moved = options.moved;
         if (down && moved < 5) {
             if (down.item) {
                 /*
@@ -248,8 +290,8 @@
                 */
             }
         }
-        down = null;
-        moved = 0;
+        options.down = null;
+        options.moved = 0;
         /*
         if (controls) {
             controls.enabled = true;
@@ -307,15 +349,57 @@
         window.removeEventListener('touchend mouseup', onUp);
     }
 
+    function onKeyUp(e) {
+        // console.log(e);
+        switch (e.keyCode) {
+            case 38:
+                // up arrow
+                break;
+            case 40:
+                // down arrow
+                break;
+            case 37:
+                // left arrow
+                var selection = combiner.prev();
+                if (selection) {
+                    if (effects) effects.select(selection.item.model);
+                } else {
+                    if (effects) effects.unselect();
+                }
+                orbiter.fit(combiner);
+                break;
+            case 39:
+                // right arrow
+                var selection = combiner.next();
+                if (selection) {
+                    if (effects) effects.select(selection.item.model);
+                } else {
+                    if (effects) effects.unselect();
+                }
+                orbiter.fit(combiner);
+                break;
+        }
+    }
+
     // container.addEventListener('dblclick', onDoubleClick);
     container.addEventListener('mousedown', onMouseDown);
     container.addEventListener('touchstart', onTouchDown);
     container.addEventListener('mousewheel', onWheel);
 
+    document.addEventListener('keyup', onKeyUp);
+
     window.addEventListener('resize', onResize, false);
+
+    var btnAdd = document.querySelector('.btn-add');
+    var btnRemove = document.querySelector('.btn-remove');
+    var btnFlip = document.querySelector('.btn-flip');
+    var btnFinish = document.querySelector('.btn-finish');
+    var btnFloor = document.querySelector('.btn-floor');
     btnAdd.addEventListener('click', onAdd);
     btnRemove.addEventListener('click', onRemove);
     btnFlip.addEventListener('click', onFlip);
+    btnFinish.addEventListener('click', onFinish);
+    btnFloor.addEventListener('click', onFloor);
 
     animate();
 

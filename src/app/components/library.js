@@ -5,6 +5,24 @@
 
     var Library = function () {
 
+        var DEBUG = {
+            FINISHES: ['standard', 'black', 'weathered'],
+            randomFinish: function () {
+                // return DEBUG.FINISHES[2];
+                return {
+                    key: DEBUG.FINISHES[Math.floor(Math.random() * DEBUG.FINISHES.length)],
+                    color: null
+                };
+            },
+            randomSecondaryFinish: function () {
+                // return DEBUG.FINISHES[2];
+                return {
+                    key: DEBUG.FINISHES[Math.floor(Math.random() * DEBUG.FINISHES.length)],
+                    color: null
+                };
+            }
+        };
+
         var BASE = 'img/textures/';
         var ANISOTROPY = 1;
         var USE_PHONG = false;
@@ -32,15 +50,23 @@
             getTextureCube: getTextureCube,
             getTextureCubeHdr: getTextureCubeHdr,
             replaceShader: replaceShader,
+            setFinish: setFinish,
+            setNextFloor: setNextFloor,
+            updateMaterials: updateMaterials,
         };
+
+        // statics
+        Library.hexToRgb = hexToRgb;
+        Library.FLOOR = 0;
 
         function getMaterials() {
             var service = this,
                 manager = this.manager,
                 loader = this.loader,
-                textures = this.textures;
+                textures = this.textures,
+                materials;
             if (USE_PHONG) {
-                return {
+                materials = {
                     floor: new THREE.MeshPhongMaterial({
                         bumpMap: textures.floor,
                         bumpScale: 0.05,
@@ -116,7 +142,7 @@
                     }),
                     standard: {
                         silver: new THREE.MeshPhongMaterial({
-                            name: 'chrome',
+                            name: 'silver',
                             color: 0x888888,
                             specular: 0x555555,
                             specularMap: textures.silver,
@@ -138,7 +164,7 @@
                     },
                     weathered: {
                         silver: new THREE.MeshPhongMaterial({
-                            name: 'chrome',
+                            name: 'silver',
                             color: 0x444444,
                             specular: 0x555555,
                             specularMap: textures.weathered,
@@ -156,7 +182,7 @@
                             metalnessMap: textures.weathered,
                         }),
                         black: new THREE.MeshPhongMaterial({
-                            name: 'chrome',
+                            name: 'black',
                             color: 0x333333,
                             specular: 0x444444,
                             specularMap: textures.weathered,
@@ -186,7 +212,7 @@
                     },
                     black: {
                         silver: new THREE.MeshPhongMaterial({
-                            name: 'chrome',
+                            name: 'silver',
                             color: 0x070707, // 0x070707
                             specular: 0x0a0a0a,
                             reflectivity: 0.05,
@@ -298,7 +324,7 @@
                     /*
                     silver: {
                         silver: new THREE.MeshPhongMaterial({
-                            name: 'chrome',
+                            name: 'silver',
                             color: 0x888888,
                             specular: 0x555555,
                             specularMap: textures.silver,
@@ -327,7 +353,7 @@
                     */
                 };
             } else {
-                return {
+                materials = {
                     floor: new THREE.MeshStandardMaterial({
                         name: 'floor',
                         color: 0x101010, // 0xaeb7c1, // 0x101010,
@@ -404,56 +430,58 @@
                     }),
                     standard: {
                         silver: new THREE.MeshStandardMaterial({
-                            name: 'chrome',
+                            name: 'silver',
                             color: 0x888888,
-                            roughness: 0.5,
-                            // roughnessMap: textures.silver,
-                            metalness: 0.9,
-                            metalnessMap: textures.silver,
+                            roughness: 0.4,
+                            // roughnessMap: textures.brushed,
+                            metalness: 0.99,
+                            metalnessMap: textures.brushed,
                             envMap: textures.env,
                             envMapIntensity: 1.0,
-                            // combine: THREE.MixOperation,
-                            // bumpMap: textures.silver,
-                            // bumpScale: 0.003,
+                            bumpMap: textures.brushed,
+                            bumpScale: 0.01,
                         }),
                         black: new THREE.MeshStandardMaterial({
                             name: 'black',
-                            color: 0x101010, // 0x0d0d0d,
+                            color: 0x101010,
                             roughness: 0.5,
-                            metalness: 0.4,
-                            bumpMap: textures.sand,
-                            bumpScale: 0.01,
+                            // roughnessMap: textures.sand,
+                            metalness: 0.99,
+                            metalnessMap: textures.sand,
                             envMap: textures.env,
                             envMapIntensity: 1.0,
-                            // combine: THREE.MixOperation,
+                            bumpMap: textures.sand,
+                            bumpScale: 0.015,
                         }),
                     },
                     weathered: {
-                        silver: new THREE.MeshStandardMaterial({
-                            name: 'chrome',
-                            color: 0x444444,
-                            map: textures.weathered,
-                            roughness: 0.7,
-                            roughnessMap: textures.silver,
-                            metalness: 0.9,
+                        silver: getWeatheredNode('silver', textures),
+                        black: getWeatheredNode('black', textures),
+                        _silver: new THREE.MeshStandardMaterial({
+                            name: 'silver',
+                            color: 0x555555,
+                            map: textures.brushed,
+                            roughness: 0.6,
+                            roughnessMap: textures.weatheredInverted,
+                            metalness: 0.99,
                             // metalnessMap: textures.weathered,
                             envMap: textures.env,
-                            // combine: THREE.MixOperation,
-                            // bumpMap: textures.silver,
-                            // bumpScale: 0.003,
+                            envMapIntensity: 1.0,
+                            // bumpMap: textures.sand,
+                            // bumpScale: 0.01,
                         }),
-                        black: new THREE.MeshStandardMaterial({
-                            name: 'chrome',
-                            color: 0x3c3c3c,
-                            map: textures.weathered,
-                            roughness: 0.7,
-                            roughnessMap: textures.silver,
-                            metalness: 0.9,
+                        _black: new THREE.MeshStandardMaterial({
+                            name: 'black',
+                            color: 0x444444,
+                            map: textures.brushed,
+                            roughness: 0.6,
+                            roughnessMap: textures.weatheredInverted,
+                            metalness: 0.99,
                             // metalnessMap: textures.weathered,
                             envMap: textures.env,
-                            // combine: THREE.MixOperation,
-                            // bumpMap: textures.silver,
-                            // bumpScale: 0.003,
+                            envMapIntensity: 1.0,
+                            // bumpMap: textures.sand,
+                            // bumpScale: 0.01,
                         }),
                         /*
                         black: new THREE.MeshLambertMaterial({
@@ -468,23 +496,28 @@
                     },
                     black: {
                         silver: new THREE.MeshStandardMaterial({
-                            name: 'chrome',
-                            color: 0x080808,
+                            name: 'silver',
+                            color: 0x131313,
                             roughness: 0.5,
-                            metalness: 0.9,
+                            // roughnessMap: textures.sand,
+                            metalness: 0.99,
+                            metalnessMap: textures.sand,
                             envMap: textures.env,
-                            // combine: THREE.MixOperation,
+                            envMapIntensity: 1.0,
+                            bumpMap: textures.sand,
+                            bumpScale: 0.015,
                         }),
                         black: new THREE.MeshStandardMaterial({
                             name: 'black',
-                            color: 0x0d0d0d,
-                            roughness: 0.4,
-                            metalness: 0.4,
-                            // bumpMap: textures.leatherBump,
-                            // bumpScale: 0.03,
+                            color: 0x101010,
+                            roughness: 0.5,
+                            // roughnessMap: textures.sand,
+                            metalness: 0.99,
+                            metalnessMap: textures.sand,
                             envMap: textures.env,
                             envMapIntensity: 1.0,
-                            // combine: THREE.MixOperation,
+                            bumpMap: textures.sand,
+                            bumpScale: 0.015,
                         }),
                     },
                     light: {
@@ -582,6 +615,28 @@
                     },
                 };
             }
+            materials.left = new THREE.MeshPhongMaterial({
+                name: 'left',
+                color: new THREE.Color(0xff0000),
+                visible: false,
+            });
+            materials.right = new THREE.MeshPhongMaterial({
+                name: 'right',
+                color: new THREE.Color(0x00ff00),
+                visible: false,
+            });
+            materials.top = new THREE.MeshPhongMaterial({
+                name: 'top',
+                color: new THREE.Color(0x0000ff),
+                visible: false,
+            });
+            materials.bottom = new THREE.MeshPhongMaterial({
+                name: 'bottom',
+                color: new THREE.Color(0xffff00),
+                visible: false,
+            });
+
+            return materials;
         }
 
         function getTexture(url) {
@@ -673,17 +728,39 @@
             textures.silver.wrapT = THREE.RepeatWrapping;
             // textures.silver.repeat.set(1, 1);
             //
+            /*
             textures.weathered = service.getTexture('brushed-dark.jpg');
             textures.weathered.anisotropy = ANISOTROPY;
             // textures.weathered.wrapS = THREE.RepeatWrapping;
             textures.weathered.wrapT = THREE.RepeatWrapping;
             // textures.weathered.repeat.set(1, 1);
+            */
             // 
+            // textures.weathered = service.getTexture('brushed-dark.jpg');
+            textures.weathered = service.getTexture('weathered-512-tile.jpg');
+            // textures.weathered = service.getTexture('weathered-tile-sm.jpg');
+            textures.weathered.anisotropy = ANISOTROPY;
+            textures.weathered.wrapS = THREE.RepeatWrapping;
+            textures.weathered.wrapT = THREE.RepeatWrapping;
+            textures.weathered.repeat.set(2, 8);
+            //
+            textures.weatheredInverted = service.getTexture('weathered-512-inverted.jpg');
+            textures.weatheredInverted.anisotropy = ANISOTROPY;
+            textures.weatheredInverted.wrapS = THREE.RepeatWrapping;
+            textures.weatheredInverted.wrapT = THREE.RepeatWrapping;
+            textures.weatheredInverted.repeat.set(2, 8);
+            //
             textures.sand = service.getTexture('sand.bump.jpg');
             textures.sand.anisotropy = ANISOTROPY;
             textures.sand.wrapS = THREE.RepeatWrapping;
             textures.sand.wrapT = THREE.RepeatWrapping;
-            textures.sand.repeat.set(5, 5);
+            textures.sand.repeat.set(2, 6);
+            //
+            textures.brushed = service.getTexture('brushed-512-tile.jpg');
+            textures.brushed.anisotropy = ANISOTROPY;
+            textures.brushed.wrapS = THREE.RepeatWrapping;
+            textures.brushed.wrapT = THREE.RepeatWrapping;
+            textures.brushed.repeat.set(2, 2);
             //
             textures.bump = service.getTexture('brushed-dark.jpg');
             textures.bump.anisotropy = ANISOTROPY;
@@ -742,6 +819,287 @@
             var outgoingLightB = "vec3 outgoingLight = (reflectedLight.directDiffuse + reflectedLight.indirectDiffuse) * specular + reflectedLight.directSpecular + reflectedLight.indirectSpecular + totalEmissiveLight;";
             // console.log('MAterials.replacing meshphong_frag', fragment.indexOf(outgoingLightA));
             THREE.ShaderChunk.meshphong_frag = fragment.replace(outgoingLightA, outgoingLightB);
+        }
+
+        function setFinish(materials, finish) {
+            finish = finish || DEBUG.randomFinish();
+            materials = materials.length ? materials : [materials];
+            console.log('library.setFinish', materials, finish);
+            var library = this;
+            return materials.map(function (material, index) {
+                switch (material.name) {
+                    case 'silver':
+                    case 'black':
+                        material = library.materials[finish.key][material.name];
+                        break;
+                }
+                return material;
+            });
+        }
+
+        function setSecondaryFinish(materials, finish) {
+            finish = finish || DEBUG.randomSecondaryFinish();
+            materials = materials.length ? materials : [materials];
+            console.log('library.setSecondaryFinish', materials, finish);
+            var library = this,
+                textures = this.textures,
+                key, color, map;
+            return materials.map(function (material, index) {
+                switch (material.name) {
+                    case 'wrap':
+                        key = finish.key;
+                        color = finish.color;
+                        material = library.materials.wrap.clone();
+                        if (key.indexOf('Leather') != -1) {
+                            map = 'leather';
+                        } else if (key.indexOf('Reptile') != -1) {
+                            map = 'reptile';
+                        } else if (key.indexOf('Stingray') != -1) {
+                            map = 'stingray';
+                        }
+                        color = Library.hexToRgb(color);
+                        material.color.r = color.r / 255;
+                        material.color.g = color.g / 255;
+                        material.color.b = color.b / 255;
+                        material.specularMap = textures[map + 'Light'];
+                        material.bumpMap = textures[map + 'Bump'];
+                        break;
+                }
+                return material;
+            });
+        }
+
+        function setNextFloor() {
+            var service = this,
+                materials = this.materials,
+                floor = this.materials.floor;
+            Library.FLOOR = (Library.FLOOR + 1) % 4;
+            switch (Library.FLOOR) {
+                case 0:
+                    floor.color.set(0x101010);
+                    floor.roughness = 0.5;
+                    floor.metalness = 0.1;
+                    floor.bumpScale = 0.05;
+                    break;
+                case 1:
+                    floor.color.set(0xaeb7c1);
+                    floor.roughness = 0.5;
+                    floor.metalness = 0.1;
+                    floor.bumpScale = 0.05;
+                    break;
+                case 2:
+                    floor.color.set(0x101010);
+                    floor.roughness = 0.5;
+                    floor.metalness = 0.1;
+                    floor.bumpScale = 0.0001;
+                    break;
+                case 3:
+                    floor.color.set(0xaeb7c1);
+                    floor.roughness = 0.5;
+                    floor.metalness = 0.1;
+                    floor.bumpScale = 0.0001;
+                    break;
+            }
+            console.log('library.setNextFloor', Library.FLOOR);
+            floor.needsUpdate = true;
+        }
+
+        function updateMaterials(materials, finish, secondaryFinish) {
+            finish = finish || DEBUG.randomFinish();
+            var library = this,
+                textures = this.textures,
+                key, color, map;
+            return materials.map(function (material, index) {
+                material.name = material.name.replace('chrome', 'silver');
+                switch (material.name) {
+                    case 'silver':
+                    case 'black':
+                        key = finish.key;
+                        material = library.materials[key][material.name];
+                        break;
+                    case 'wrap':
+                        key = secondaryFinish.key;
+                        color = secondaryFinish.color;
+                        material = library.materials.wrap.clone();
+                        if (key.indexOf('Leather') != -1) {
+                            map = 'leather';
+                        } else if (key.indexOf('Reptile') != -1) {
+                            map = 'reptile';
+                        } else if (key.indexOf('Stingray') != -1) {
+                            map = 'stingray';
+                        }
+                        color = Library.hexToRgb(color);
+                        material.color.r = color.r / 255;
+                        material.color.g = color.g / 255;
+                        material.color.b = color.b / 255;
+                        material.specularMap = textures[map + 'Light'];
+                        material.bumpMap = textures[map + 'Bump'];
+                        break;
+                    case 'bronze':
+                    case 'gold':
+                    case 'red':
+                    case 'green':
+                    case 'left':
+                    case 'right':
+                    case 'top':
+                    case 'bottom':
+                        material = library.materials[material.name];
+                        break;
+                }
+                return material;
+            });
+            /*
+            var finish = part.currentFinish;
+            if (finish && materials[finish.key]) {
+                // console.log(finish.key);
+                replaceMaterial(_materials, 'chrome', materials[finish.key].silver);
+                replaceMaterial(_materials, 'black', materials[finish.key].black);
+            }
+            replaceMaterial(_materials, 'bronze', materials.bronze);
+            replaceMaterial(_materials, 'gold', materials.gold);
+            replaceMaterial(_materials, 'red', materials.red);
+            replaceMaterial(_materials, 'green', materials.green);
+            if (part.hasSecondaryFinishes) {
+                var secondaryFinish = part.currentSecondaryFinish;
+                replaceMaterial(_materials, 'wrap', materials.wrap.clone());
+                onUpdateSecondaryFinish(_materials, secondaryFinish);
+            }
+            part.materials = _materials;
+            if (part.isLedReceiver) {
+                onUpdateLed([part], part.led);
+            }
+            */
+        }
+
+        function updateLedMaterials(receivers, led) {
+            var ledType, ledFinish = null;
+            if (led) {
+                ledType = led.ledType;
+                ledFinish = led.currentFinish;
+            } else {
+                ledType = APP.Parts.ledTypeEnum.OFF;
+            }
+            angular.forEach(receivers, function (part, key) {
+                // console.log('onUpdateLed', part.key, ledType, ledFinish);
+                switch (ledType) {
+                    case APP.Parts.ledTypeEnum.OFF:
+                        replaceMaterial(part.materials, 'light', materials.light.off);
+                        replaceMaterial(part.materials, 'glare', materials.glare.off.clone());
+                        replaceMaterial(part.materials, 'emitterGlare', materials.emitterGlare.off.clone());
+                        // replaceMaterial(part.materials, 'emitter', materials.emitter.off.clone());
+                        break;
+                    case APP.Parts.ledTypeEnum.ON6:
+                        replaceMaterial(part.materials, 'light', materials.light.on6);
+                        replaceMaterial(part.materials, 'glare', materials.glare.on6.clone());
+                        replaceMaterial(part.materials, 'emitterGlare', materials.emitterGlare.on6.clone());
+                        // replaceMaterial(part.materials, 'emitter', materials.emitter.on6.clone());
+                        onUpdateColor(part.materials, ledFinish);
+                        break;
+                    case APP.Parts.ledTypeEnum.ON12:
+                        replaceMaterial(part.materials, 'light', materials.light.on12);
+                        replaceMaterial(part.materials, 'glare', materials.glare.on12.clone());
+                        replaceMaterial(part.materials, 'emitterGlare', materials.emitterGlare.on12.clone());
+                        // replaceMaterial(part.materials, 'emitter', materials.emitter.on12.clone());
+                        onUpdateColor(part.materials, ledFinish);
+                        break;
+                }
+            });
+        }
+
+        function hexToRgb(hex) {
+            var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+            return result ? {
+                r: parseInt(result[1], 16),
+                g: parseInt(result[2], 16),
+                b: parseInt(result[3], 16)
+            } : null;
+        }
+
+        function getWeatheredNode(name, textures) {
+            var material = new THREE.StandardNodeMaterial();
+            // material.color = // albedo (vec3)
+            // material.alpha = // opacity (float)
+            // material.roughness = // roughness (float)
+            // material.metalness = // metalness (float)
+            // material.normal = // normalmap (vec3)
+            // material.normalScale = // normalmap scale (vec2)
+            // material.emissive = // emissive color (vec3)
+            // material.ambient = // ambient color (vec3)
+            // material.shadow = // shadowmap (vec3)
+            // material.light = // custom-light (vec3)
+            // material.ao = // ambient occlusion (float)
+            // material.environment = // reflection/refraction (vec3)
+            // material.transform = // vertex transformation (vec3)
+            var curvature = new THREE.AttributeNode('curvature', 'float');
+            /*
+            var hard = new THREE.FloatNode(20.0);
+            var curvature = new THREE.OperatorNode(
+                _curvature,
+                hard,
+                THREE.OperatorNode.ADD
+            );
+            */
+            var colorA = new THREE.ColorNode(0x040404);
+            var colorB = new THREE.TextureNode(textures.brushed);
+            // var colorB = new THREE.ColorNode(0xffffff);
+            var color = new THREE.Math3Node(
+                colorA,
+                colorB,
+                curvature,
+                THREE.Math3Node.MIX
+            );
+            material.color = color;
+            // material.roughness = new THREE.FloatNode(0.5);
+            var roughnessA = new THREE.FloatNode(0.6);
+            var roughnessB = new THREE.FloatNode(0.5);
+            var roughness = new THREE.Math3Node(
+                roughnessA,
+                roughnessB,
+                curvature,
+                THREE.Math3Node.MIX
+            );
+            material.roughness = roughness;
+            material.metalness = new THREE.FloatNode(0.7);
+            /*
+            // var roughnessA = new THREE.TextureNode(textures.weatheredInverted);
+            var metalnessA = new THREE.FloatNode(0.7);
+            var metalnessB = new THREE.FloatNode(0.7);
+            var metalness = new THREE.Math3Node(
+                metalnessA,
+                metalnessB,
+                curvature,
+                THREE.Math3Node.MIX
+            );
+            material.metalness = metalness;
+            */
+            // var environment = new THREE.CubeTextureNode(textures.env);
+            var environment = new THREE.Math3Node(
+                new THREE.ColorNode(0x040404),
+                new THREE.CubeTextureNode(textures.env),
+                curvature,
+                THREE.Math3Node.MIX
+            );
+            material.environment = environment;
+            /*
+            var environmentAlpha = new THREE.OperatorNode(
+                curvature,
+                new THREE.FloatNode(0.1),
+                THREE.OperatorNode.MUL
+            );
+            material.environmentAlpha = environmentAlpha;
+            */
+            // material.environment = textures.env;
+            /*
+            addGui('color', material.color.value.getHex(), function (val) {
+                material.color.value.setHex(val);
+            }, true);
+            addGui('roughnessA', roughnessA.number, function (val) {
+                roughnessA.number = val;
+            }, false, 0, 1);
+            */
+            material.name = name;
+            material.build();
+            return material;
         }
 
         return Library;
