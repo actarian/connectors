@@ -1,4 +1,4 @@
-/* global window, document, console, TweenLite */
+/* global angular, window, document, console, TweenLite */
 
 (function () {
     'use strict';
@@ -68,5 +68,11 @@
     }();
 
     window.Effects = Effects;
+
+    var app = angular.module('app');
+
+    app.factory('Effects', [function () {
+        return Effects;
+    }]);
 
 }());

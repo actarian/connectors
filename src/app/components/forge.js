@@ -1,4 +1,4 @@
-/* global window, document, console  */
+/* global angular, window, document, console  */
 
 (function () {
     'use strict';
@@ -65,5 +65,11 @@
     }();
 
     window.Forge = Forge;
+
+    var app = angular.module('app');
+
+    app.factory('Forge', [function () {
+        return Forge;
+    }]);
 
 }());

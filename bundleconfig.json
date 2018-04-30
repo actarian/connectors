@@ -73,9 +73,21 @@
         "bower_components/three.js/examples/js/loaders/RGBELoader.js",
         "bower_components/three.js/examples/js/loaders/HDRCubeTextureLoader.js",
         "bower_components/three.js/examples/js/pmrem/PMREMGenerator.js",
-        "bower_components/three.js/examples/js/pmrem/PMREMCubeUVPacker.js"
+        "bower_components/three.js/examples/js/pmrem/PMREMCubeUVPacker.js",
+
+
+        "bower_components/angular/angular.js",
+        "bower_components/json-formatter/dist/json-formatter.js"
     ],
     "outputFileName": "docs/js/vendors.js",
+    "minify": {
+        "enabled": true
+    }
+}, {
+    "inputFiles": [
+        "bower_components/json-formatter/dist/json-formatter.css"
+    ],
+    "outputFileName": "docs/css/vendors.css",
     "minify": {
         "enabled": true
     }
@@ -89,7 +101,7 @@
     }
 }, {
     "inputFiles": [
-        "src/app/components/prototype.js",
+        "src/app/app.module.js",
         "src/app/components/combiner.js",
         "src/app/components/curvature.js",
         "src/app/components/effects.js",
@@ -97,7 +109,10 @@
         "src/app/components/forge.js",
         "src/app/components/library.js",
         "src/app/components/orbiter.js",
-        "src/app/app.js"
+        "src/app/components/polyfills.js",
+        "src/app/components/prototypes.js",
+        "src/app/components/threeutils.js",
+        "src/app/components/builder/builder.directive.js"
     ],
     "outputFileName": "docs/js/app.js",
     "minify": {

@@ -1,4 +1,4 @@
-/* global window, document, console, TweenLite, Forge, Combiner, Orbiter, Library */
+/* global angular, window, document, console, TweenLite, Forge, Combiner, Orbiter, Library */
 
 (function () {
     'use strict';
@@ -351,6 +351,7 @@
 
     function onKeyUp(e) {
         // console.log(e);
+        var selection;
         switch (e.keyCode) {
             case 38:
                 // up arrow
@@ -360,7 +361,7 @@
                 break;
             case 37:
                 // left arrow
-                var selection = combiner.prev();
+                selection = combiner.prev();
                 if (selection) {
                     if (effects) effects.select(selection.item.model);
                 } else {
@@ -370,7 +371,7 @@
                 break;
             case 39:
                 // right arrow
-                var selection = combiner.next();
+                selection = combiner.next();
                 if (selection) {
                     if (effects) effects.select(selection.item.model);
                 } else {

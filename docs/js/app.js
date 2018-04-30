@@ -1,139 +1,15 @@
-/* global window, document, console  */
+/* global angular */
 
 (function () {
-    'use strict';
+    "use strict";
 
-    Element.prototype.hasClass = function (name) {
-        return new RegExp("(?:^|\\s+)" + name + "(?:\\s+|$)").test(this.className);
-    };
-
-    Element.prototype.addClass = function (name) {
-        if (!this.hasClass(name)) {
-            this.className = this.className ? (this.className + ' ' + name) : name;
-        }
-    };
-
-    Element.prototype.removeClass = function (name) {
-        if (this.hasClass(name)) {
-            this.className = this.className.split(name).join('').replace(/\s\s+/g, ' '); // .replace(new RegExp('(?:^|\\s+)' + name + '(?:\\s+|$)', 'g'), '');
-        }
-    };
-
-    Element.prototype.isDescendant = function (target) {
-        function isDescendant(node, target) {
-            if (node === target) {
-                return true;
-            } else if (node.parentNode) {
-                return isDescendant(node.parentNode, target);
-            } else {
-                return false;
-            }
-        }
-        return isDescendant(this, target);
-    };
-
-    Element.prototype.getBounds = function () {
-        var bounds = {
-            x: 0,
-            y: 0,
-            width: this.offsetWidth,
-            height: this.offsetHeight,
-            center: {
-                x: 0,
-                y: 0
-            },
-        };
-        bounds.center.x = bounds.width / 2;
-        bounds.center.y = bounds.height / 2;
-        return bounds;
-    };
-
-    window.getTouch = function (e) {
-        var t = new THREE.Vector2();
-        t.t = new THREE.Vector2();
-        t.relativeTo = function (node) {
-            var rect = node.getBoundingClientRect();
-            var scrollX = window.pageXOffset || document.documentElement.scrollLeft;
-            var scrollY = window.pageYOffset || document.documentElement.scrollTop;
-            this.x = ((this.x - rect.left - scrollX) / node.offsetWidth) * 2 - 1;
-            this.y = -((this.y - rect.top - scrollY) / node.offsetHeight) * 2 + 1;
-        };
-        t.pinchSize = function () {
-            return Math.sqrt((this.x - this.t.x) * (this.x - this.t.x) + (this.y - this.t.y) * (this.y - this.t.y));
-        };
-        t.count = 1;
-        /*
-        var t = {
-            x: 0,
-            y: 0,
-            t: {
-                x: 0,
-                y: 0,
-            },
-            count: 1,
-            dist: function () {
-                return Math.sqrt((this.x - this.t.x) * (this.x - this.t.x) + (this.y - this.t.y) * (this.y - this.t.y));
-            }
-        };
-        */
-        if (e.type == 'touchstart' || e.type == 'touchmove' || e.type == 'touchend' || e.type == 'touchcancel') {
-            var touch = null,
-                second = null;
-            var touches = e.originalEvent ? e.originalEvent.touches || e.originalEvent.changedTouches : e.touches || e.changedTouches;
-            if (touches && touches.length) {
-                touch = touches[0];
-                if (touches.length > 1) {
-                    second = touches[1];
-                }
-            }
-            if (touch) {
-                t.x = touch.pageX;
-                t.y = touch.pageY;
-            }
-            if (second) {
-                t.t.x = second.pageX;
-                t.t.y = second.pageY;
-                t.count = 2;
-            }
-        } else if (e.type == 'click' || e.type == 'mousedown' || e.type == 'mouseup' || e.type == 'mousemove' || e.type == 'mouseover' || e.type == 'mouseout' || e.type == 'mouseenter' || e.type == 'mouseleave') {
-            t.x = e.pageX;
-            t.y = e.pageY;
-        }
-        return t;
-    };
+    var app = angular.module('app', ['jsonFormatter']);
 
 }());
-/* global window, document, console, TweenLite */
+/* global angular, window, document, console, TweenLite */
 
 (function () {
     'use strict';
-
-    function calcNormal(normals, normal, angle) {
-        var allowed = normals.filter(function (n) {
-            return n.angleTo(normal) < angle * Math.PI / 180;
-        });
-        return allowed.reduce(function (a, b) {
-            return a.clone().add(b);
-        }).normalize();
-    }
-
-    THREE.GeometryUtils.computeVertexNormals = function (geometry, angle) {
-        geometry.computeFaceNormals();
-        var vertices = geometry.vertices.map(function () {
-            return [];
-        });
-        geometry.faces.map(function (face) {
-            vertices[face.a].push(face.normal);
-            vertices[face.b].push(face.normal);
-            vertices[face.c].push(face.normal);
-        });
-        geometry.faces.map(function (face) {
-            face.vertexNormals[0] = calcNormal(vertices[face.a], face.normal, angle);
-            face.vertexNormals[1] = calcNormal(vertices[face.b], face.normal, angle);
-            face.vertexNormals[2] = calcNormal(vertices[face.c], face.normal, angle);
-        });
-        if (geometry.faces.length > 0) geometry.normalsNeedUpdate = true;
-    };
 
     var DEBUG = {
         HELPER: false,
@@ -344,9 +220,13 @@
             // model.geometry.computeVertexNormals();
             model.geometry.verticesNeedUpdate = true;
             model.geometry.uvsNeedUpdate = true;
-            // model.geometry = Curvature.setEdges(model.geometry, 40);
+            // setEdges
+            model.geometry = Curvature.setEdges(model.geometry);
+            /*
+            // setGeometry
             model.geometry = new THREE.BufferGeometry().fromGeometry(model.geometry);
             Curvature.setGeometry(model.geometry);
+            */
             // model.geometry.mergeVertices();
             // model.geometry.computeFaceNormals();
             // model.geometry.normalsNeedUpdate = true;
@@ -818,33 +698,17 @@
 
     window.Combiner = Combiner;
 
+    var app = angular.module('app');
+
+    app.factory('Combiner', [function () {
+        return Combiner;
+    }]);
+
 }());
-/* global window, document, console, TweenLite */
+/* global angular, window, document, console, TweenLite */
 
 (function () {
     'use strict';
-
-    /* 
-    <script id="vertexShaderRaw" type="x-shader/x-vertex">
-        attribute float curvature;
-        varying float vCurvature;
-        void main() {
-            vec3 p = position;
-            vec4 modelViewPosition = modelViewMatrix * vec4( p , 1.0 );
-            gl_Position = projectionMatrix * modelViewPosition;
-            vCurvature = curvature;
-        }
-    </script>
-    */
-    /*
-    <script id="fragmentShaderRaw" type="x-shader/x-fragment">
-        varying vec3 vViewPosition;
-        varying float vCurvature;
-        void main() {
-            gl_FragColor = vec4( vCurvature * 2.0, 0.0, 0.0, 0.0 );
-        }
-    </script>
-    */
 
     var Curvature = function () {
 
@@ -947,40 +811,251 @@
                 attribute[i] = f;
             }
 
-            // var filtered = new Float32Array(attribute);
-            // filterConvex(filtered);
             geometry.addAttribute('curvature', new THREE.BufferAttribute(attribute, 1));
-
-            /*
-            var filtered = new Float32Array(attribute);
-            filterConvex(filtered);
-            geometry.attributes.curvature.array = filtered;
-            geometry.attributes.curvature.needsUpdate = true;
-            */
-
-            /*
-            var materialRaw = new THREE.ShaderMaterial({
-                vertexShader: document.getElementById('vertexShaderRaw').textContent,
-                fragmentShader: document.getElementById('fragmentShaderRaw').textContent
-            });
-
-            ninjaMeshRaw = new THREE.Mesh(geometry, materialRaw);
-            //init GUI
-            var filtered = new Float32Array(attribute);
-            filterConvex(filtered);
-            geometry.attributes.curvature.array = filtered;
-            geometry.attributes.curvature.needsUpdate = true;
-            */
         }
 
-        function setEdges(geometry, thresholdAngle) {
+        function setEdges(geometry, angleThresold) {
+            angleThresold = angleThresold || 95;
+
+            var faces = geometry.faces,
+                vertices = geometry.vertices,
+                face, centroid;
+            geometry = new THREE.BufferGeometry().fromGeometry(geometry);
+            var dEdge = {},
+                edge, key, i, ia, ib, ic, va, vb, vc, pa, pb, pc, sa, sb, sc, na, nb, nc, ma, mb,
+                dot, cross, angle;
+            var positions = geometry.attributes.position.array;
+            var normals = geometry.attributes.normal.array;
+
+            function addKey(ia, ib, sa, sb, pa, pb, i, ca) {
+                ma = Math.min(ia, ib); // minimun vertex index
+                mb = Math.max(ia, ib); // maximum vertex index
+                key = ma + '-' + mb;
+                if (dEdge[key] === undefined) {
+                    dEdge[key] = {
+                        sa: sa, // string key vertex a
+                        sb: sb, // string key vertex b
+                        na: pa, // index normal a
+                        ca: ca, // centroid face a
+                        fa: i, // index face a
+                        fb: undefined
+                    };
+                } else {
+                    dEdge[key].nb = pa; // index normal b (pa or pb should be indifferently)
+                    dEdge[key].fb = i; // index face b
+                    dEdge[key].cb = ca; // centroid face b
+                }
+            }
+
+            for (var f = 0; f < faces.length; f++) {
+                face = faces[f];
+                centroid = THREE.FaceUtils.computeCentroid(face, vertices);
+                // vertex indices
+                ia = face.a;
+                ib = face.b;
+                ic = face.c;
+                // vertices
+                va = vertices[ia];
+                vb = vertices[ib];
+                vc = vertices[ic];
+                // dVert keys
+                sa = va.toArray().toString();
+                sb = vb.toArray().toString();
+                sc = vc.toArray().toString();
+                i = f * 9; // position face index                
+                pa = i; // position vert a index
+                pb = i + 3; // position vert b index
+                pc = i + 6; // position vert c index
+                // dEdge keys
+                addKey(ia, ib, sa, sb, pa, pb, i, centroid); // key edge a-b
+                addKey(ib, ic, sb, sc, pb, pc, i, centroid); // key edge b-c
+                addKey(ic, ia, sc, sa, pc, pa, i, centroid); // key edge c-a
+            }
+
+            var curvatures = new Array(geometry.attributes.position.count).fill(0.0);
+
+            var edges = Object.keys(dEdge);
+            var matches = 0;
+
+            var dVert = {};
+
+            for (key in dEdge) {
+                edge = dEdge[key];
+                if (edge.nb) {
+                    na = edge.na;
+                    nb = edge.nb;
+                    va = new THREE.Vector3(normals[na], normals[na + 1], normals[na + 2]);
+                    // vb = new THREE.Vector3(normals[nb], normals[nb + 1], normals[nb + 2]);
+                    vb = new THREE.Vector3().subVectors(edge.cb, edge.ca).normalize();
+                    dot = va.dot(vb);
+                    angle = Math.acos(dot) * THREE.Math.RAD2DEG;
+                    if (angle >= angleThresold) {
+                        sa = edge.sa;
+                        sb = edge.sb;
+                        dVert[sa] = dot;
+                        dVert[sb] = dot;
+                        matches++;
+                    }
+                }
+            }
+
+            // apply curvature
+            for (i = 0; i < curvatures.length; i++) {
+                va = new THREE.Vector3(positions[3 * i], positions[3 * i + 1], positions[3 * i + 2]);
+                sa = va.toArray().toString();
+                curvatures[i] = dVert[sa];
+            }
+
+            var averages = new Array(curvatures.length);
+            var min = 10,
+                max = 0,
+                mid, abs;
+
+            for (i = 0; i < curvatures.length; i += 3) {
+                mid = (curvatures[i] + curvatures[i + 1] + curvatures[i + 2]) / 3;
+                abs = Math.abs(mid);
+                min = Math.min(min, abs);
+                max = Math.max(max, abs);
+                averages[i] = mid;
+                averages[i + 1] = mid;
+                averages[i + 2] = mid;
+            }
+
+            var range = (max - min);
+            for (i = 0; i < averages.length; i++) {
+                mid = averages[i];
+                abs = Math.abs(mid);
+                if (mid < 0) {
+                    averages[i] = (min - abs) / range;
+                } else {
+                    averages[i] = (abs - min) / range;
+                }
+            }
+
+            curvatures = new Float32Array(curvatures); // averages
+            geometry.addAttribute('curvature', new THREE.BufferAttribute(curvatures, 1));
+            console.log('faces', faces.length, 'vertex', geometry.attributes.position.count);
+            console.log('edges', edges.length, 'matches', matches, (matches / edges.length * 100).toFixed(2) + '%', 'angle', angleThresold + '°');
+
+            // faces 13754 vertex 41262
+            // edges 20368 matches 3089 15.17% angle 95° 
+            return geometry;
+        }
+
+        function setEdges1(geometry, minThresholdAngle, maxThresholdAngle) {
+            var min = minThresholdAngle || 265,
+                max = maxThresholdAngle || 275;
+            /*
+            var convexMinDot = Math.cos(THREE.Math.DEG2RAD * (minThresholdAngle || 265));
+            var convexMaxDot = Math.cos(THREE.Math.DEG2RAD * (maxThresholdAngle || 275));
+            var convexMinDotNeg = Math.cos(THREE.Math.DEG2RAD * (minThresholdAngle || 265) - 180);
+            var convexMaxDotNeg = Math.cos(THREE.Math.DEG2RAD * (maxThresholdAngle || 275) - 180);
+            */
+
+            var faces = geometry.faces,
+                vertices = geometry.vertices,
+                face, vert;
+            geometry = new THREE.BufferGeometry().fromGeometry(geometry);
+            var dEdge = {},
+                edge, key, i, ia, ib, ic, va, vb, vc, pa, pb, pc, sa, sb, sc, na, nb, nc, ma, mb,
+                dot, cross, angle;
+            var positions = geometry.attributes.position.array;
+            var normals = geometry.attributes.normal.array;
+
+            function addKey(ia, ib, sa, sb, pa, pb, i) {
+                ma = Math.min(ia, ib); // minimun vertex index
+                mb = Math.max(ia, ib); // maximum vertex index
+                key = ma + '-' + mb;
+                if (dEdge[key] === undefined) {
+                    dEdge[key] = {
+                        sa: sa, // string key vertex a
+                        sb: sb, // string key vertex b
+                        na: pa, // index normal a
+                        fa: i, // index face a
+                        fb: undefined
+                    };
+                } else {
+                    dEdge[key].nb = pa; // index normal b (pa or pb should be indifferently)
+                    dEdge[key].fb = i; // index face b
+                }
+            }
+
+            for (var f = 0; f < faces.length; f++) {
+                face = faces[f];
+                // vertex indices
+                ia = face.a;
+                ib = face.b;
+                ic = face.c;
+                // vertices
+                va = vertices[ia];
+                vb = vertices[ib];
+                vc = vertices[ic];
+                // dVert keys
+                sa = va.toArray().toString();
+                sb = vb.toArray().toString();
+                sc = vc.toArray().toString();
+                i = f * 9; // position face index                
+                pa = i; // position vert a index
+                pb = i + 3; // position vert b index
+                pc = i + 6; // position vert c index
+                // dEdge keys
+                addKey(ia, ib, sa, sb, pa, pb, i); // key edge a-b
+                addKey(ib, ic, sb, sc, pb, pc, i); // key edge b-c
+                addKey(ic, ia, sc, sa, pc, pa, i); // key edge c-a
+            }
+
+            var curvatures = new Array(geometry.attributes.position.count).fill(0.0);
+            curvatures = new Float32Array(curvatures);
+
+            var edges = Object.keys(dEdge);
+            var matches = 0;
+
+            var dVert = {};
+
+            for (key in dEdge) {
+                edge = dEdge[key];
+                if (edge.nb) {
+                    na = edge.na;
+                    nb = edge.nb;
+                    va = new THREE.Vector3(normals[na], normals[na + 1], normals[na + 2]);
+                    vb = new THREE.Vector3(normals[nb], normals[nb + 1], normals[nb + 2]);
+                    dot = va.dot(vb);
+                    angle = Math.acos(dot) * THREE.Math.RAD2DEG;
+                    cross = new THREE.Vector3().crossVectors(va, vb);
+                    if (cross.x < 0 || cross.y < 0 || cross.z < 0) {
+                        angle += 180;
+                    }
+                    if (angle >= min && angle <= max) {
+                        sa = edge.sa;
+                        sb = edge.sb;
+                        dVert[sa] = dot;
+                        dVert[sb] = dot;
+                    }
+                }
+            }
+            // apply curvature
+            for (i = 0; i < curvatures.length; i++) {
+                va = new THREE.Vector3(positions[3 * i], positions[3 * i + 1], positions[3 * i + 2]);
+                sa = va.toArray().toString();
+                curvatures[i] = dVert[sa];
+            }
+            geometry.addAttribute('curvature', new THREE.BufferAttribute(curvatures, 1));
+            console.log('faces', faces.length, 'vertex', geometry.attributes.position.count);
+            console.log('edges', edges.length, 'matches', matches, (matches / edges.length * 100).toFixed(2) + '%');
+
+            // faces 13754 vertex 41262
+            // edges 20368 matches 0 0.00%
+            return geometry;
+        }
+
+        function setEdges2(geometry, thresholdAngle) {
             thresholdAngle = thresholdAngle || 90;
             var thresholdDot = Math.cos(THREE.Math.DEG2RAD * thresholdAngle);
 
             var faces = geometry.faces,
                 face;
             geometry = new THREE.BufferGeometry().fromGeometry(geometry);
-            var edges = {},
+            var dEdge = {},
                 edge, key, ea, eb, i, ia, ib, ic, va, vb, vc, na, nb, nc;
             // var positions = geometry.attributes.position.array;
             var normals = geometry.attributes.normal.array;
@@ -989,8 +1064,8 @@
                 ea = Math.min(va, vb);
                 eb = Math.max(va, vb);
                 key = ea + '-' + eb;
-                if (edges[key] === undefined) {
-                    edges[key] = {
+                if (dEdge[key] === undefined) {
+                    dEdge[key] = {
                         a: ia,
                         b: ib,
                         c: ia,
@@ -999,9 +1074,9 @@
                         fb: undefined
                     };
                 } else {
-                    edges[key].fb = i;
-                    edges[key].c = ia;
-                    edges[key].d = ib;
+                    dEdge[key].fb = i;
+                    dEdge[key].c = ia;
+                    dEdge[key].d = ib;
                 }
             }
             for (var f = 0; f < faces.length; f++) {
@@ -1018,49 +1093,23 @@
                 addKey(vc, va, ic, ia, i);
             }
 
-            /*
-            function addKey(a, b, i) {
-                ea = Math.min(a, b);
-                eb = Math.max(a, b);
-                key = ea + '-' + eb;
-                if (edges[key] === undefined) {
-                    edges[key] = {
-                        a: ea,
-                        b: eb,
-                        fa: i,
-                        fb: undefined
-                    };
-                } else {
-                    edges[key].fb = i;
-                    console.log(i);
-                }
-            }
-            for (i = 0; i < positions.length; i += 9) {
-                ia = i;
-                ib = i + 3;
-                ic = i + 6;
-                addKey(ia, ib, i);
-                addKey(ib, ic, i);
-                addKey(ic, ia, i);
-            }
-            */
             var attribute = new Float32Array(geometry.attributes.position.count);
             for (i = 0; i < geometry.attributes.position.count; i++) {
                 attribute[i] = 1.0;
             }
-            var edgeKeys = Object.keys(edges);
-            console.log(edgeKeys.length);
-            var edgeMatches = 0;
+            var edges = Object.keys(dEdge);
+            console.log(edges.length);
+            var matches = 0;
 
             function fillEdge(e) {
                 attribute[e.a / 3] = 0.0;
                 attribute[e.b / 3] = 0.0;
                 attribute[e.c / 3] = 0.0;
                 attribute[e.d / 3] = 0.0;
-                edgeMatches++;
+                matches++;
             }
-            for (key in edges) {
-                edge = edges[key];
+            for (key in dEdge) {
+                edge = dEdge[key];
                 if (edge.fb === undefined) {
                     fillEdge(edge);
                 } else {
@@ -1074,15 +1123,15 @@
                 }
             }
             geometry.addAttribute('curvature', new THREE.BufferAttribute(attribute, 1));
-            console.log('matches', edgeMatches, (edgeMatches / edgeKeys.length * 100).toFixed(2));
+            console.log('matches', matches, (matches / edges.length * 100).toFixed(2));
             return geometry;
         }
 
-        function setEdges1(geometry, thresholdAngle) {
+        function setEdges3(geometry, thresholdAngle) {
             thresholdAngle = thresholdAngle || 90;
             var thresholdDot = Math.cos(THREE.Math.DEG2RAD * thresholdAngle);
             var edge = [0, 0],
-                edges = {},
+                dEdge = {},
                 edge1, edge2;
             var key, keys = ['a', 'b', 'c'];
             /*
@@ -1106,15 +1155,15 @@
                     edge[0] = Math.min(edge1, edge2);
                     edge[1] = Math.max(edge1, edge2);
                     key = edge[0] + ',' + edge[1];
-                    if (edges[key] === undefined) {
-                        edges[key] = {
+                    if (dEdge[key] === undefined) {
+                        dEdge[key] = {
                             a: edge[0],
                             b: edge[1],
                             fa: i,
                             fb: undefined
                         };
                     } else {
-                        edges[key].fb = i;
+                        dEdge[key].fb = i;
                     }
                 }
             }
@@ -1123,11 +1172,11 @@
             for (var i = 0; i < vertices.length * 3; i++) {
                 attribute[i] = 1.0;
             }
-            var edgeKeys = Object.keys(edges);
-            console.log(edgeKeys.length);
-            var edgeMatches = 0;
-            for (key in edges) {
-                var e = edges[key];
+            var edges = Object.keys(dEdge);
+            console.log(edges.length);
+            var matches = 0;
+            for (key in dEdge) {
+                var e = dEdge[key];
                 // an edge is only rendered if the angle (in degrees) between the face normals of the adjoining faces exceeds this value. default = 1 degree.
                 if (e.fb === undefined || faces[e.fa].normal.dot(faces[e.fb].normal) <= thresholdDot) {
                     /*
@@ -1142,11 +1191,11 @@
                     attribute[e.b * 3] = 0.0;
                     attribute[e.b * 3 + 1] = 0.0;
                     attribute[e.b * 3 + 2] = 0.0;
-                    edgeMatches++;
+                    matches++;
                 }
             }
             console.log(geometry.normals.length);
-            console.log('matches', edgeMatches, (edgeMatches / edgeKeys.length * 100).toFixed(2));
+            console.log('matches', matches, (matches / edges.length * 100).toFixed(2));
             geometry = new THREE.BufferGeometry().fromDirectGeometry(geometry);
             geometry.addAttribute('curvature', new THREE.BufferAttribute(attribute, 1));
             console.log('verts', vertices.length, geometry.attributes.position.count);
@@ -1154,16 +1203,6 @@
             // this.addAttribute('position', new Float32BufferAttribute(vertices, 3));
             return geometry;
         }
-
-        /*   
-        fn cMAKgetAngleBetweenFaces normal1 normal2 center1 center2 = (
-    	    local faMatrix = translate (matrixFromNormal normal1) center1
-	        local fbCoord = (center2 * (inverse faMatrix)).z
-	        local normAngle = acos(dot (normalize normal1) (normalize normal2))
-	        if fbCoord < 0 do normAngle = 360 - normAngle
-	        normAngle 
-	    )
-        */
 
         function average(dict) {
             var sum = 0;
@@ -1200,8 +1239,14 @@
 
     window.Curvature = Curvature;
 
+    var app = angular.module('app');
+
+    app.factory('Curvature', [function () {
+        return Curvature;
+    }]);
+
 }());
-/* global window, document, console, TweenLite */
+/* global angular, window, document, console, TweenLite */
 
 (function () {
     'use strict';
@@ -1272,8 +1317,14 @@
 
     window.Effects = Effects;
 
+    var app = angular.module('app');
+
+    app.factory('Effects', [function () {
+        return Effects;
+    }]);
+
 }());
-/* global window, document, console, TweenLite */
+/* global angular, window, document, console, TweenLite */
 
 (function () {
     'use strict';
@@ -1463,8 +1514,14 @@
 
     window.Fitter = Fitter;
 
+    var app = angular.module('app');
+
+    app.factory('Fitter', [function () {
+        return Fitter;
+    }]);
+
 }());
-/* global window, document, console  */
+/* global angular, window, document, console  */
 
 (function () {
     'use strict';
@@ -1532,8 +1589,14 @@
 
     window.Forge = Forge;
 
+    var app = angular.module('app');
+
+    app.factory('Forge', [function () {
+        return Forge;
+    }]);
+
 }());
-/* global window, document, console, TweenLite */
+/* global angular, window, document, console, TweenLite */
 
 (function () {
     'use strict';
@@ -1598,579 +1661,274 @@
             var service = this,
                 manager = this.manager,
                 loader = this.loader,
-                textures = this.textures,
-                materials;
-            if (USE_PHONG) {
-                materials = {
-                    floor: new THREE.MeshPhongMaterial({
-                        bumpMap: textures.floor,
-                        bumpScale: 0.05,
-                        color: 0x101010,
-                        specular: 0x101010,
-                        reflectivity: 0.15,
-                        shininess: 12,
-                        // metal: true,
-                    }),
-                    wrap: new THREE.MeshPhongMaterial({
-                        name: 'wrap',
-                        color: 0x101010,
-                        specular: 0x444444,
-                        shininess: 7,
-                        reflectivity: 0.75,
-                        specularMap: textures.leatherLight,
-                        bumpMap: textures.leatherBump,
-                        bumpScale: 0.15,
-                        combine: THREE.MixOperation,
-                        // metal: true,
-                    }),
-                    bronze: new THREE.MeshPhongMaterial({
-                        name: 'bronze',
-                        color: 0xc07f5d,
-                        specular: 0x555555,
-                        specularMap: textures.silver,
-                        shininess: 10,
-                        reflectivity: 0.20,
-                        envMap: textures.env,
-                        combine: THREE.MixOperation,
-                        bumpMap: textures.silver,
-                        bumpScale: 0.001,
-                        // metal: true,
-                    }),
-                    gold: new THREE.MeshPhongMaterial({
-                        name: 'gold',
-                        color: 0xc8ad60,
-                        specular: 0x555555,
-                        specularMap: textures.silver,
-                        shininess: 10,
-                        reflectivity: 0.20,
-                        envMap: textures.env,
-                        combine: THREE.MixOperation,
-                        bumpMap: textures.silver,
-                        bumpScale: 0.001,
-                        // metal: true,
-                    }),
-                    green: new THREE.MeshPhongMaterial({
-                        name: 'green',
-                        color: 0x00aa00,
-                        specular: 0x333333,
-                        specularMap: textures.silver,
-                        shininess: 30,
-                        reflectivity: 0.10,
-                        envMap: textures.env,
-                        combine: THREE.MixOperation,
-                        bumpMap: textures.silver,
-                        bumpScale: 0.003,
-                        // metal: true,
-                    }),
-                    red: new THREE.MeshPhongMaterial({
-                        name: 'red',
-                        color: 0xdd0000,
-                        specular: 0x333333,
-                        specularMap: textures.silver,
-                        shininess: 30,
-                        reflectivity: 0.10,
-                        envMap: textures.env,
-                        combine: THREE.MixOperation,
-                        bumpMap: textures.silver,
-                        bumpScale: 0.003,
-                        // metal: true,
-                    }),
-                    standard: {
-                        silver: new THREE.MeshPhongMaterial({
-                            name: 'silver',
-                            color: 0x888888,
-                            specular: 0x555555,
-                            specularMap: textures.silver,
-                            shininess: 30,
-                            reflectivity: 0.15,
-                            envMap: textures.env,
-                            combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                        }),
-                        black: new THREE.MeshPhongMaterial({ // MeshLambertMaterial
-                            name: 'black',
-                            color: 0x0d0d0d, // 0x0d0d0d
-                            reflectivity: 0.3,
-                            envMap: textures.env,
-                            combine: THREE.MultiplyOperation
-                        }),
-                    },
-                    weathered: {
-                        silver: new THREE.MeshPhongMaterial({
-                            name: 'silver',
-                            color: 0x444444,
-                            specular: 0x555555,
-                            specularMap: textures.weathered,
-                            shininess: 90,
-                            reflectivity: 0.15,
-                            envMap: textures.env,
-                            combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                            map: textures.weathered,
-                            roughness: 0.2,
-                            // roughnessMap: textures.silver,
-                            metalness: 0.5,
-                            metalnessMap: textures.weathered,
-                        }),
-                        black: new THREE.MeshPhongMaterial({
-                            name: 'black',
-                            color: 0x333333,
-                            specular: 0x444444,
-                            specularMap: textures.weathered,
-                            shininess: 90,
-                            reflectivity: 0.05,
-                            envMap: textures.env,
-                            combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                            map: textures.weathered,
-                            roughness: 1.4,
-                            roughnessMap: textures.weathered,
-                            metalness: 0.5,
-                            metalnessMap: textures.silver,
-                        }),
-                        /*
-                        black: new THREE.MeshLambertMaterial({
-                            name: 'black',
-                            color: 0x070707, // 0x070707
-                            specular: 0x0a0a0a,
-                            reflectivity: 0.05,
-                            envMap: textures.env,
-                            combine: THREE.MultiplyOperation
-                        }),
-                        */
-                    },
-                    black: {
-                        silver: new THREE.MeshPhongMaterial({
-                            name: 'silver',
-                            color: 0x070707, // 0x070707
-                            specular: 0x0a0a0a,
-                            reflectivity: 0.05,
-                            envMap: textures.env,
-                            combine: THREE.MultiplyOperation
-                        }),
-                        black: new THREE.MeshPhongMaterial({ // MeshLambertMaterial
-                            name: 'black',
-                            color: 0x060606, // 0x060606
-                            specular: 0x0a0a0a,
-                            reflectivity: 0.05,
-                            envMap: textures.env,
-                            combine: THREE.MultiplyOperation
-                        }),
-                    },
-                    light: {
-                        off: new THREE.MeshPhongMaterial({
-                            name: 'light',
-                            opacity: 0.98,
-                            transparent: true,
-                            color: 0x444444,
-                            specular: 0x888888,
-                            shininess: 20,
-                            reflectivity: 0.3
-                        }),
-                        on6: new THREE.MeshPhongMaterial({
-                            name: 'light',
-                            opacity: 0.98,
-                            transparent: true,
-                            color: 0x444444,
-                            emissive: 0x444444,
-                            specular: 0x888888,
-                            shininess: 20,
-                            reflectivity: 0.3
-                        }),
-                        on12: new THREE.MeshPhongMaterial({
-                            name: 'light',
-                            color: 0xffffff,
-                            emissive: 0x888888,
-                            specular: 0xffffff,
-                            shininess: 100,
-                            reflectivity: 0.3
-                        }),
-                    },
-                    glare: {
-                        off: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0,
-                            transparent: true,
-                            color: 0x000000,
-                        }),
-                        on6: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.6,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.glare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 0,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                        on12: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.85,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.glare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 0,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                    },
-                    emitterGlare: {
-                        off: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0,
-                            transparent: true,
-                            color: 0x000000,
-                        }),
-                        on6: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.6,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.emitterGlare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 0,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                        on12: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.85,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.emitterGlare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 100,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                    },
-                    /*
-                    silver: {
-                        silver: new THREE.MeshPhongMaterial({
-                            name: 'silver',
-                            color: 0x888888,
-                            specular: 0x555555,
-                            specularMap: textures.silver,
-                            shininess: 30,
-                            reflectivity: 0.15,
-                            envMap: textures.env,
-                            // combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                        }),
-                        black: new THREE.MeshPhongMaterial({
-                            name: 'black',
-                            color: 0x777777,
-                            specular: 0x444444,
-                            specularMap: textures.silver,
-                            shininess: 30,
-                            reflectivity: 0.15,
-                            envMap: textures.env,
-                            // combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                        }),
-                    },
-                    */
-                };
-            } else {
-                materials = {
-                    floor: new THREE.MeshStandardMaterial({
-                        name: 'floor',
-                        color: 0x101010, // 0xaeb7c1, // 0x101010,
-                        roughness: 0.5, // 0.4,
-                        metalness: 0.1, // 0.99,
-                        bumpMap: textures.floor,
-                        bumpScale: 0.05,
-                        envMap: textures.env,
-                        // combine: THREE.MixOperation,
-                    }),
-                    wrap: new THREE.MeshPhongMaterial({
-                        name: 'wrap',
-                        color: 0x101010,
-                        specular: 0x444444,
-                        shininess: 7,
-                        reflectivity: 0.75,
-                        specularMap: textures.leatherLight,
-                        bumpMap: textures.leatherBump,
-                        bumpScale: 0.15,
-                        // combine: THREE.MixOperation,
-                        // metal: true,
-                    }),
-                    bronze: new THREE.MeshStandardMaterial({
-                        name: 'bronze',
-                        color: 0xc07f5d,
-                        roughness: 0.5,
-                        roughnessMap: textures.silver,
-                        metalness: 0.9,
-                        metalnessMap: textures.weathered,
-                        envMap: textures.env,
-                        envMapIntensity: 0.15,
-                        // combine: THREE.MixOperation,
-                        // bumpMap: textures.silver,
-                        // bumpScale: 0.003,
-                    }),
-                    gold: new THREE.MeshStandardMaterial({
-                        name: 'gold',
-                        color: 0xc8ad60,
-                        roughness: 0.5,
-                        roughnessMap: textures.silver,
-                        metalness: 0.9,
-                        metalnessMap: textures.weathered,
-                        envMap: textures.env,
-                        envMapIntensity: 0.15,
-                        // combine: THREE.MixOperation,
-                        // bumpMap: textures.silver,
-                        // bumpScale: 0.003,
-                    }),
-                    green: new THREE.MeshPhongMaterial({
-                        name: 'green',
-                        color: 0x00aa00,
-                        specular: 0x333333,
-                        specularMap: textures.silver,
-                        shininess: 30,
-                        reflectivity: 0.10,
-                        envMap: textures.env,
-                        // combine: THREE.MixOperation,
-                        bumpMap: textures.silver,
-                        bumpScale: 0.003,
-                        // metal: true,
-                    }),
-                    red: new THREE.MeshPhongMaterial({
-                        name: 'red',
-                        color: 0xdd0000,
-                        specular: 0x333333,
-                        specularMap: textures.silver,
-                        shininess: 30,
-                        reflectivity: 0.10,
-                        envMap: textures.env,
-                        // combine: THREE.MixOperation,
-                        bumpMap: textures.silver,
-                        bumpScale: 0.003,
-                        // metal: true,
-                    }),
-                    standard: {
-                        silver: new THREE.MeshStandardMaterial({
-                            name: 'silver',
-                            color: 0x888888,
-                            roughness: 0.4,
-                            // roughnessMap: textures.brushed,
-                            metalness: 0.99,
-                            metalnessMap: textures.brushed,
-                            envMap: textures.env,
-                            envMapIntensity: 1.0,
-                            bumpMap: textures.brushed,
-                            bumpScale: 0.01,
-                        }),
-                        black: new THREE.MeshStandardMaterial({
-                            name: 'black',
-                            color: 0x101010,
-                            roughness: 0.5,
-                            // roughnessMap: textures.sand,
-                            metalness: 0.99,
-                            metalnessMap: textures.sand,
-                            envMap: textures.env,
-                            envMapIntensity: 1.0,
-                            bumpMap: textures.sand,
-                            bumpScale: 0.015,
-                        }),
-                    },
-                    weathered: {
-                        silver: getWeatheredNode('silver', textures),
-                        black: getWeatheredNode('black', textures),
-                        _silver: new THREE.MeshStandardMaterial({
-                            name: 'silver',
-                            color: 0x555555,
-                            map: textures.brushed,
-                            roughness: 0.6,
-                            roughnessMap: textures.weatheredInverted,
-                            metalness: 0.99,
-                            // metalnessMap: textures.weathered,
-                            envMap: textures.env,
-                            envMapIntensity: 1.0,
-                            // bumpMap: textures.sand,
-                            // bumpScale: 0.01,
-                        }),
-                        _black: new THREE.MeshStandardMaterial({
-                            name: 'black',
-                            color: 0x444444,
-                            map: textures.brushed,
-                            roughness: 0.6,
-                            roughnessMap: textures.weatheredInverted,
-                            metalness: 0.99,
-                            // metalnessMap: textures.weathered,
-                            envMap: textures.env,
-                            envMapIntensity: 1.0,
-                            // bumpMap: textures.sand,
-                            // bumpScale: 0.01,
-                        }),
-                        /*
-                        black: new THREE.MeshLambertMaterial({
-                            name: 'black',
-                            color: 0x070707, // 0x070707
-                            specular: 0x0a0a0a,
-                            reflectivity: 0.05,
-                            envMap: textures.env,
-                            combine: THREE.MultiplyOperation
-                        }),
-                        */
-                    },
-                    black: {
-                        silver: new THREE.MeshStandardMaterial({
-                            name: 'silver',
-                            color: 0x131313,
-                            roughness: 0.5,
-                            // roughnessMap: textures.sand,
-                            metalness: 0.99,
-                            metalnessMap: textures.sand,
-                            envMap: textures.env,
-                            envMapIntensity: 1.0,
-                            bumpMap: textures.sand,
-                            bumpScale: 0.015,
-                        }),
-                        black: new THREE.MeshStandardMaterial({
-                            name: 'black',
-                            color: 0x101010,
-                            roughness: 0.5,
-                            // roughnessMap: textures.sand,
-                            metalness: 0.99,
-                            metalnessMap: textures.sand,
-                            envMap: textures.env,
-                            envMapIntensity: 1.0,
-                            bumpMap: textures.sand,
-                            bumpScale: 0.015,
-                        }),
-                    },
-                    light: {
-                        off: new THREE.MeshPhongMaterial({
-                            name: 'light',
-                            opacity: 0.98,
-                            transparent: true,
-                            color: 0x444444,
-                            specular: 0x888888,
-                            shininess: 20,
-                            reflectivity: 0.3
-                        }),
-                        on6: new THREE.MeshPhongMaterial({
-                            name: 'light',
-                            opacity: 0.98,
-                            transparent: true,
-                            color: 0x444444,
-                            emissive: 0x444444,
-                            specular: 0x888888,
-                            shininess: 20,
-                            reflectivity: 0.3
-                        }),
-                        on12: new THREE.MeshPhongMaterial({
-                            name: 'light',
-                            color: 0xffffff,
-                            emissive: 0x888888,
-                            specular: 0xffffff,
-                            shininess: 100,
-                            reflectivity: 0.3
-                        }),
-                    },
-                    glare: {
-                        off: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0,
-                            transparent: true,
-                            color: 0x000000,
-                        }),
-                        on6: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.6,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.glare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 0,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                        on12: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.85,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.glare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 0,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                    },
-                    emitterGlare: {
-                        off: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0,
-                            transparent: true,
-                            color: 0x000000,
-                        }),
-                        on6: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.6,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.emitterGlare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 0,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                        on12: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.85,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.emitterGlare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 100,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                    },
-                };
-            }
-            materials.left = new THREE.MeshPhongMaterial({
-                name: 'left',
-                color: new THREE.Color(0xff0000),
-                visible: false,
-            });
-            materials.right = new THREE.MeshPhongMaterial({
-                name: 'right',
-                color: new THREE.Color(0x00ff00),
-                visible: false,
-            });
-            materials.top = new THREE.MeshPhongMaterial({
-                name: 'top',
-                color: new THREE.Color(0x0000ff),
-                visible: false,
-            });
-            materials.bottom = new THREE.MeshPhongMaterial({
-                name: 'bottom',
-                color: new THREE.Color(0xffff00),
-                visible: false,
-            });
+                textures = this.textures;
 
+            var materials = {
+                left: new THREE.MeshPhongMaterial({
+                    name: 'left',
+                    color: new THREE.Color(0xff0000),
+                    visible: false,
+                }),
+                right: new THREE.MeshPhongMaterial({
+                    name: 'right',
+                    color: new THREE.Color(0x00ff00),
+                    visible: false,
+                }),
+                top: new THREE.MeshPhongMaterial({
+                    name: 'top',
+                    color: new THREE.Color(0x0000ff),
+                    visible: false,
+                }),
+                bottom: new THREE.MeshPhongMaterial({
+                    name: 'bottom',
+                    color: new THREE.Color(0xffff00),
+                    visible: false,
+                }),
+                floor: new THREE.MeshStandardMaterial({
+                    name: 'floor',
+                    color: 0x101010, // 0xaeb7c1, // 0x101010,
+                    roughness: 0.5, // 0.4,
+                    metalness: 0.1, // 0.99,
+                    bumpMap: textures.floor,
+                    bumpScale: 0.05,
+                    envMap: textures.env,
+                }),
+                wrap: new THREE.MeshPhongMaterial({
+                    name: 'wrap',
+                    color: 0x101010,
+                    specular: 0x444444,
+                    shininess: 7,
+                    reflectivity: 0.75,
+                    specularMap: textures.leatherLight,
+                    bumpMap: textures.leatherBump,
+                    bumpScale: 0.15,
+                    // metal: true,
+                }),
+                bronze: new THREE.MeshStandardMaterial({
+                    name: 'bronze',
+                    color: 0xc07f5d,
+                    roughness: 0.5,
+                    roughnessMap: textures.silver,
+                    metalness: 0.9,
+                    metalnessMap: textures.weathered,
+                    envMap: textures.env,
+                    envMapIntensity: 0.15,
+                    // bumpMap: textures.silver,
+                    // bumpScale: 0.003,
+                }),
+                gold: new THREE.MeshStandardMaterial({
+                    name: 'gold',
+                    color: 0xc8ad60,
+                    roughness: 0.5,
+                    roughnessMap: textures.silver,
+                    metalness: 0.9,
+                    metalnessMap: textures.weathered,
+                    envMap: textures.env,
+                    envMapIntensity: 0.15,
+                    // bumpMap: textures.silver,
+                    // bumpScale: 0.003,
+                }),
+                green: new THREE.MeshPhongMaterial({
+                    name: 'green',
+                    color: 0x00aa00,
+                    specular: 0x333333,
+                    specularMap: textures.silver,
+                    shininess: 30,
+                    reflectivity: 0.10,
+                    envMap: textures.env,
+                    // combine: THREE.MixOperation,
+                    bumpMap: textures.silver,
+                    bumpScale: 0.003,
+                    // metal: true,
+                }),
+                red: new THREE.MeshPhongMaterial({
+                    name: 'red',
+                    color: 0xdd0000,
+                    specular: 0x333333,
+                    specularMap: textures.silver,
+                    shininess: 30,
+                    reflectivity: 0.10,
+                    envMap: textures.env,
+                    bumpMap: textures.silver,
+                    bumpScale: 0.003,
+                    // metal: true,
+                }),
+                standard: {
+                    silver: new THREE.MeshStandardMaterial({
+                        name: 'silver',
+                        color: 0x888888,
+                        roughness: 0.4,
+                        // roughnessMap: textures.brushed,
+                        metalness: 0.99,
+                        metalnessMap: textures.brushed,
+                        envMap: textures.env,
+                        envMapIntensity: 1.0,
+                        bumpMap: textures.brushed,
+                        bumpScale: 0.01,
+                    }),
+                    black: new THREE.MeshStandardMaterial({
+                        name: 'black',
+                        color: 0x101010,
+                        roughness: 0.5,
+                        // roughnessMap: textures.sand,
+                        metalness: 0.99,
+                        metalnessMap: textures.sand,
+                        envMap: textures.env,
+                        envMapIntensity: 1.0,
+                        bumpMap: textures.sand,
+                        bumpScale: 0.015,
+                    }),
+                },
+                weathered: {
+                    silver: getWeatheredNode('silver', textures),
+                    black: getWeatheredNode('black', textures),
+                    _silver: new THREE.MeshStandardMaterial({
+                        name: 'silver',
+                        color: 0x555555,
+                        map: textures.brushed,
+                        roughness: 0.6,
+                        roughnessMap: textures.weatheredInverted,
+                        metalness: 0.99,
+                        // metalnessMap: textures.weathered,
+                        envMap: textures.env,
+                        envMapIntensity: 1.0,
+                        // bumpMap: textures.sand,
+                        // bumpScale: 0.01,
+                    }),
+                    _black: new THREE.MeshStandardMaterial({
+                        name: 'black',
+                        color: 0x444444,
+                        map: textures.brushed,
+                        roughness: 0.6,
+                        roughnessMap: textures.weatheredInverted,
+                        metalness: 0.99,
+                        // metalnessMap: textures.weathered,
+                        envMap: textures.env,
+                        envMapIntensity: 1.0,
+                        // bumpMap: textures.sand,
+                        // bumpScale: 0.01,
+                    }),
+                },
+                black: {
+                    silver: new THREE.MeshStandardMaterial({
+                        name: 'silver',
+                        color: 0x131313,
+                        roughness: 0.5,
+                        // roughnessMap: textures.sand,
+                        metalness: 0.99,
+                        metalnessMap: textures.sand,
+                        envMap: textures.env,
+                        envMapIntensity: 1.0,
+                        bumpMap: textures.sand,
+                        bumpScale: 0.015,
+                    }),
+                    black: new THREE.MeshStandardMaterial({
+                        name: 'black',
+                        color: 0x101010,
+                        roughness: 0.5,
+                        // roughnessMap: textures.sand,
+                        metalness: 0.99,
+                        metalnessMap: textures.sand,
+                        envMap: textures.env,
+                        envMapIntensity: 1.0,
+                        bumpMap: textures.sand,
+                        bumpScale: 0.015,
+                    }),
+                },
+                light: {
+                    off: new THREE.MeshPhongMaterial({
+                        name: 'light',
+                        opacity: 0.98,
+                        transparent: true,
+                        color: 0x444444,
+                        specular: 0x888888,
+                        shininess: 20,
+                        reflectivity: 0.3
+                    }),
+                    on6: new THREE.MeshPhongMaterial({
+                        name: 'light',
+                        opacity: 0.98,
+                        transparent: true,
+                        color: 0x444444,
+                        emissive: 0x444444,
+                        specular: 0x888888,
+                        shininess: 20,
+                        reflectivity: 0.3
+                    }),
+                    on12: new THREE.MeshPhongMaterial({
+                        name: 'light',
+                        color: 0xffffff,
+                        emissive: 0x888888,
+                        specular: 0xffffff,
+                        shininess: 100,
+                        reflectivity: 0.3
+                    }),
+                },
+                glare: {
+                    off: new THREE.MeshLambertMaterial({
+                        name: 'glare',
+                        opacity: 0,
+                        transparent: true,
+                        color: 0x000000,
+                    }),
+                    on6: new THREE.MeshLambertMaterial({
+                        name: 'glare',
+                        opacity: 0.6,
+                        transparent: true,
+                        color: 0xecf4fb,
+                        map: textures.glare,
+                        blending: THREE.AdditiveBlending,
+                        specular: 0x000000,
+                        shininess: 0,
+                        combine: THREE.MixOperation,
+                        reflectivity: 0
+                    }),
+                    on12: new THREE.MeshLambertMaterial({
+                        name: 'glare',
+                        opacity: 0.85,
+                        transparent: true,
+                        color: 0xecf4fb,
+                        map: textures.glare,
+                        blending: THREE.AdditiveBlending,
+                        specular: 0x000000,
+                        shininess: 0,
+                        combine: THREE.MixOperation,
+                        reflectivity: 0
+                    }),
+                },
+                emitterGlare: {
+                    off: new THREE.MeshLambertMaterial({
+                        name: 'glare',
+                        opacity: 0,
+                        transparent: true,
+                        color: 0x000000,
+                    }),
+                    on6: new THREE.MeshLambertMaterial({
+                        name: 'glare',
+                        opacity: 0.6,
+                        transparent: true,
+                        color: 0xecf4fb,
+                        map: textures.emitterGlare,
+                        blending: THREE.AdditiveBlending,
+                        specular: 0x000000,
+                        shininess: 0,
+                        combine: THREE.MixOperation,
+                        reflectivity: 0
+                    }),
+                    on12: new THREE.MeshLambertMaterial({
+                        name: 'glare',
+                        opacity: 0.85,
+                        transparent: true,
+                        color: 0xecf4fb,
+                        map: textures.emitterGlare,
+                        blending: THREE.AdditiveBlending,
+                        specular: 0x000000,
+                        shininess: 100,
+                        combine: THREE.MixOperation,
+                        reflectivity: 0
+                    }),
+                },
+            };
             return materials;
         }
 
@@ -2404,39 +2162,66 @@
             });
         }
 
+        function materialTween(from, to, callback) {
+            var options = {
+                onComplete: function () {
+                    if (typeof callback === 'function') {
+                        callback();
+                    }
+                }
+            };
+            for (var p in to) {
+                if (p === 'color') {
+                    var color = new THREE.Color(to.color);
+                    options[p] = {
+                        r: color.r,
+                        g: color.g,
+                        b: color.b
+                    };
+                } else {
+                    options[p] = to[p];
+                }
+            }
+            TweenLite.to(from, 0.4, options);
+        }
+
         function setNextFloor() {
             var service = this,
                 materials = this.materials,
                 floor = this.materials.floor;
             Library.FLOOR = (Library.FLOOR + 1) % 4;
+            var to = {};
             switch (Library.FLOOR) {
                 case 0:
-                    floor.color.set(0x101010);
-                    floor.roughness = 0.5;
-                    floor.metalness = 0.1;
-                    floor.bumpScale = 0.05;
+                    to.color = 0x101010;
+                    to.roughness = 0.5;
+                    to.metalness = 0.1;
+                    to.bumpScale = 0.05;
                     break;
                 case 1:
-                    floor.color.set(0xaeb7c1);
-                    floor.roughness = 0.5;
-                    floor.metalness = 0.1;
-                    floor.bumpScale = 0.05;
+                    to.color = 0xaeb7c1;
+                    to.roughness = 0.5;
+                    to.metalness = 0.1;
+                    to.bumpScale = 0.05;
                     break;
                 case 2:
-                    floor.color.set(0x101010);
-                    floor.roughness = 0.5;
-                    floor.metalness = 0.1;
-                    floor.bumpScale = 0.0001;
+                    to.color = 0x101010;
+                    to.roughness = 0.5;
+                    to.metalness = 0.1;
+                    to.bumpScale = 0.0001;
                     break;
                 case 3:
-                    floor.color.set(0xaeb7c1);
-                    floor.roughness = 0.5;
-                    floor.metalness = 0.1;
-                    floor.bumpScale = 0.0001;
+                    to.color = 0xaeb7c1;
+                    to.roughness = 0.5;
+                    to.metalness = 0.1;
+                    to.bumpScale = 0.0001;
                     break;
             }
             console.log('library.setNextFloor', Library.FLOOR);
-            floor.needsUpdate = true;
+            materialTween(floor, to, function () {
+                console.log('materialTween.completed');
+            });
+            // floor.needsUpdate = true;
         }
 
         function updateMaterials(materials, finish, secondaryFinish) {
@@ -2643,8 +2428,14 @@
 
     window.Library = Library;
 
+    var app = angular.module('app');
+
+    app.factory('Library', [function () {
+        return Library;
+    }]);
+
 }());
-/* global window, document, console, TweenLite */
+/* global angular, window, document, console, TweenLite */
 
 (function () {
     'use strict';
@@ -2838,412 +2629,688 @@
 
     window.Orbiter = Orbiter;
 
+    var app = angular.module('app');
+
+    app.factory('Orbiter', [function () {
+        return Orbiter;
+    }]);
+
 }());
-/* global window, document, console, TweenLite, Forge, Combiner, Orbiter, Library */
+/* global angular, window, document, console, TweenLite */
 
 (function () {
     'use strict';
 
-    if (!Detector.webgl) {
-        Detector.addGetWebGLMessage();
-        return;
-    }
+    function Polyfills() {
 
-    var container = document.querySelector('.editor');
-
-    var w = container.offsetWidth,
-        h = container.offsetHeight;
-
-    var options = {
-        down: false,
-        moved: 0,
-    };
-
-    var raycaster = new THREE.Raycaster();
-
-    var forge = new Forge();
-
-    var renderer = addRenderer();
-
-    var library = new Library(renderer);
-
-    var camera = new THREE.PerspectiveCamera(45, w / h, 1, 50000);
-
-    var scene = new THREE.Scene();
-
-    var lights = addLights(scene);
-
-    var floor = addFloor(scene);
-
-    var combiner = new Combiner(scene);
-
-    var orbiter = new Orbiter(scene, camera);
-
-    var effects = new Effects(scene, camera, renderer, w, h);
-
-    function render() {
-        // required if controls.enableDamping or controls.autoRotate are set to true
-        // controls.update();
-        combiner.update();
-        //
-        var y = combiner.center.y - combiner.size.y / 2 - 3;
-        floor.position.y += (y - floor.position.y) / 8;
-        lights.position.x += (combiner.center.x - lights.position.x) / 8;
-        lights.position.y += (combiner.center.y - lights.position.y) / 8;
-        lights.position.z += (combiner.center.z - lights.position.z) / 8;
-        // floor.position.x = combiner.center.x;
-        // floor.position.z = combiner.center.z;
-        //
-        orbiter.update();
-        effects.update();
-        // renderer.render(scene, camera);
-    }
-
-    function snapshot() {
-        if (options.snapshot === true) {
-            options.snapshot = false;
-            /*
-            Snapshot.post(scope.saber.code, renderer.domElement.toDataURL('image/jpeg', 0.95)).then(function (share) {
-                scope.$root.$broadcast('onSocialPictureReady', share);
-            });
-            */
-        }
-    }
-
-    function animate() {
-        render();
-        snapshot();
-        options.requestId = window.requestAnimationFrame(animate, renderer.domElement);
-    }
-
-    function play() {
-        if (!options.requestId) {
-            animate();
-        }
-    }
-
-    function pause() {
-        if (options.requestId) {
-            window.cancelAnimationFrame(options.requestId);
-            options.requestId = false;
-        }
-    }
-
-    function addRenderer() {
-        var renderer = new THREE.WebGLRenderer({
-            alpha: true,
-            antialias: true,
-        });
-        renderer.setClearColor(0x101010);
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.setSize(w, h);
-        container.appendChild(renderer.domElement);
-        return renderer;
-    }
-
-    function addLights(scene) {
-        var lights = new THREE.Group();
-        lights.name = 'pivot';
-        lights.rotation.y = Math.PI / 180 * 90;
-        //
-        var light = new THREE.AmbientLight(0x444444);
-        scene.add(light);
-        // 
-        var light1 = new THREE.DirectionalLight(0xeedddd, 1.0, 2000);
-        light1.name = 'light1';
-        light1.position.set(-30, 20, 10);
-        lights.add(light1);
-        //
-        var light2 = new THREE.DirectionalLight(0xddddee, 1.0, 2000);
-        light2.name = 'light2';
-        light2.position.set(30, 20, -10);
-        lights.add(light2);
-        //
-        /*
-        var light = new THREE.PointLight(0xddddee, 1, 2000);
-        light.position.set(0, 200, 0);
-        scene.add(light);
-        */
-        scene.add(lights);
-        return lights;
-    }
-
-    function addFloor(scene) {
-        /*
-        var radius = 200;
-        var radials = 16;
-        var circles = 8;
-        var divisions = 64;
-        var floor = new THREE.PolarGridHelper(radius, radials, circles, divisions);
-        */
-        // var floor = new THREE.GridHelper(500, 500, 0x888888, 0xAAAAAA);
-        // floor.rotateOnAxis( new THREE.Vector3( 1, 0, 0 ), 90 * ( Math.PI/180 ));	
-        var floor = new THREE.Mesh(new THREE.PlaneBufferGeometry(500, 500), library.materials.floor);
-        floor.name = 'floor';
-        floor.rotation.x = -Math.PI / 2;
-        floor.position.y = -3.5;
-        floor.visible = true;
-        scene.add(floor);
-        return floor;
-    }
-
-    function onAdd() {
-        if (!combiner.busy()) {
-            forge.load(function (geometry, materials) {
-                if (effects) effects.unselect();
-                materials = library.updateMaterials(materials, null, null); // finish, secondaryFinish
-                var item = combiner.add(geometry, materials);
-                orbiter.fit(combiner);
-                combiner.entering++;
-                item.enter(function () {
-                    combiner.entering--;
-                });
-            });
-        }
-    }
-
-    function onRemove() {
-        if (!combiner.busy()) {
-            combiner.remove();
-            orbiter.fit(combiner);
-        }
-    }
-
-    function onFlip() {
-        combiner.flip(function () {
-            orbiter.fit(combiner);
-        });
-    }
-
-    function onFinish() {
-        combiner.selectedModel(function (model) {
-            model.material = library.setFinish(model.material, null);
-        });
-    }
-
-    function onFloor() {
-        library.setNextFloor();
-    }
-
-    function onResize() {
-        w = container.offsetWidth;
-        h = container.offsetHeight;
-        camera.aspect = w / h;
-        camera.updateProjectionMatrix();
-        orbiter.fit(combiner);
-        renderer.setSize(w, h);
-        if (effects) effects.resize(w, h);
-    }
-
-    function onDown(e) {
-        var down = getTouch(e);
-        down.relativeTo(container);
-        down.mx = down.x;
-        down.startDragAngle = orbiter.dragAngle;
-        down.startDistance = orbiter.distance;
-        // console.log('down', down);
-        raycaster.setFromCamera(down, camera);
-        var selection = combiner.select(raycaster);
-        // console.log('selection', selection);
-        if (selection) {
-            /*
-            if (controls) {
-                controls.enabled = false;
-            }
-            */
-            down.index = selection.index;
-            down.item = selection.item;
-            down.rotation = selection.rotation;
-            if (effects) effects.select(down.item.model);
-        } else {
-            if (effects) effects.unselect();
-        }
-        orbiter.fit(combiner);
-        options.down = down;
-        /*
-        down.index = i;
-        down.item = value;
-        down.angle = value.coords.angle;
-        */
-    }
-
-    function onMove(e) {
-        options.moved++;
-        var pow = 1; // 0.001;
-        if (e.type === 'touchmove') {
-            e.stopPropagation();
-            e.preventDefault();
-            pow *= 4;
-        }
-        var down = options.down;
-        if (down) {
-            var move = getTouch(e);
-            move.relativeTo(container);
-            var diff = move.sub(down);
-            // console.log(diff.x, diff.y);
-            if (move.count == 2 && down.count == 2) {
-                // PINCH                   
-                orbiter.distance = down.startDistance + (down.pinchSize() - move.pinchSize()) * pow * 10;
-            } else {
-                if (combiner.selection && combiner.selection.item === down.item) {
-                    // ROTATE ITEM
-                    // down.item.rotation = down.rotation + (move.y - down.y) * pow * 10;
-                    // var index = down.index;
-                    // down.item.outer.rotation.x = down.rotation.x + diff.y * Math.PI;
-                    combiner.rotate(diff.y * pow * 10);
-                } else {
-                    // DRAG CAMERA
-                    orbiter.dragAngle = down.startDragAngle + diff.x * pow * 10;
-                    orbiter.distance = down.startDistance + diff.y * pow * -10;
-                    /*
-                    // SOUND
-                    if (combiner.selectedItem && combiner.selectedItem.type == APP.Parts.typeEnum.Sound) {
-                        if (Math.abs(move.x - down.mx) > w / 3) {
-                            down.mx = move.x;
-                            scope.$root.$broadcast('onSoundSwing', scope.saber.sound, Math.abs(move.x - down.mx) / 100);
-                        }
+        if (!Array.prototype.fill) {
+            Object.defineProperty(Array.prototype, 'fill', {
+                value: function (value) {
+                    if (this === null) {
+                        throw new TypeError('this is null or not defined');
                     }
+                    var O = Object(this);
+                    var len = O.length >>> 0;
+                    var start = arguments[1];
+                    var relativeStart = start >> 0;
+                    var k = relativeStart < 0 ?
+                        Math.max(len + relativeStart, 0) :
+                        Math.min(relativeStart, len);
+                    var end = arguments[2];
+                    var relativeEnd = end === undefined ?
+                        len : end >> 0;
+                    var final = relativeEnd < 0 ?
+                        Math.max(len + relativeEnd, 0) :
+                        Math.min(relativeEnd, len);
+                    while (k < final) {
+                        O[k] = value;
+                        k++;
+                    }
+                    return O;
+                }
+            });
+        }
+
+    }
+
+    // Polyfills();
+
+    var app = angular.module('app');
+
+    app.service('Polyfills', [Polyfills]);
+
+}());
+/* global angular, window, document, console  */
+
+(function () {
+    'use strict';
+
+    function Prototypes() {
+
+        Element.prototype.hasClass = function (name) {
+            return new RegExp("(?:^|\\s+)" + name + "(?:\\s+|$)").test(this.className);
+        };
+
+        Element.prototype.addClass = function (name) {
+            if (!this.hasClass(name)) {
+                this.className = this.className ? (this.className + ' ' + name) : name;
+            }
+        };
+
+        Element.prototype.removeClass = function (name) {
+            if (this.hasClass(name)) {
+                this.className = this.className.split(name).join('').replace(/\s\s+/g, ' '); // .replace(new RegExp('(?:^|\\s+)' + name + '(?:\\s+|$)', 'g'), '');
+            }
+        };
+
+        Element.prototype.isDescendant = function (target) {
+            function isDescendant(node, target) {
+                if (node === target) {
+                    return true;
+                } else if (node.parentNode) {
+                    return isDescendant(node.parentNode, target);
+                } else {
+                    return false;
+                }
+            }
+            return isDescendant(this, target);
+        };
+
+        Element.prototype.getBounds = function () {
+            var bounds = {
+                x: 0,
+                y: 0,
+                width: this.offsetWidth,
+                height: this.offsetHeight,
+                center: {
+                    x: 0,
+                    y: 0
+                },
+            };
+            bounds.center.x = bounds.width / 2;
+            bounds.center.y = bounds.height / 2;
+            return bounds;
+        };
+
+        window.getTouch = function (e) {
+            var t = new THREE.Vector2();
+            t.t = new THREE.Vector2();
+            t.relativeTo = function (node) {
+                var rect = node.getBoundingClientRect();
+                var scrollX = window.pageXOffset || document.documentElement.scrollLeft;
+                var scrollY = window.pageYOffset || document.documentElement.scrollTop;
+                this.x = ((this.x - rect.left - scrollX) / node.offsetWidth) * 2 - 1;
+                this.y = -((this.y - rect.top - scrollY) / node.offsetHeight) * 2 + 1;
+            };
+            t.pinchSize = function () {
+                return Math.sqrt((this.x - this.t.x) * (this.x - this.t.x) + (this.y - this.t.y) * (this.y - this.t.y));
+            };
+            t.count = 1;
+            /*
+            var t = {
+                x: 0,
+                y: 0,
+                t: {
+                    x: 0,
+                    y: 0,
+                },
+                count: 1,
+                dist: function () {
+                    return Math.sqrt((this.x - this.t.x) * (this.x - this.t.x) + (this.y - this.t.y) * (this.y - this.t.y));
+                }
+            };
+            */
+            if (e.type == 'touchstart' || e.type == 'touchmove' || e.type == 'touchend' || e.type == 'touchcancel') {
+                var touch = null,
+                    second = null;
+                var touches = e.originalEvent ? e.originalEvent.touches || e.originalEvent.changedTouches : e.touches || e.changedTouches;
+                if (touches && touches.length) {
+                    touch = touches[0];
+                    if (touches.length > 1) {
+                        second = touches[1];
+                    }
+                }
+                if (touch) {
+                    t.x = touch.pageX;
+                    t.y = touch.pageY;
+                }
+                if (second) {
+                    t.t.x = second.pageX;
+                    t.t.y = second.pageY;
+                    t.count = 2;
+                }
+            } else if (e.type == 'click' || e.type == 'mousedown' || e.type == 'mouseup' || e.type == 'mousemove' || e.type == 'mouseover' || e.type == 'mouseout' || e.type == 'mouseenter' || e.type == 'mouseleave') {
+                t.x = e.pageX;
+                t.y = e.pageY;
+            }
+            return t;
+        };
+
+    }
+
+    // Prototypes();
+
+    var app = angular.module('app');
+
+    app.service('Prototypes', [Prototypes]);
+
+}());
+/* global angular, window, document, console, TweenLite */
+
+(function () {
+    'use strict';
+
+    function calcNormal(normals, normal, angle) {
+        var allowed = normals.filter(function (n) {
+            return n.angleTo(normal) < angle * Math.PI / 180;
+        });
+        return allowed.reduce(function (a, b) {
+            return a.clone().add(b);
+        }).normalize();
+    }
+
+    function ThreeUtils() {
+
+        THREE.GeometryUtils.computeVertexNormals = function (geometry, angle) {
+            geometry.computeFaceNormals();
+            var vertices = geometry.vertices.map(function () {
+                return [];
+            });
+            geometry.faces.map(function (face) {
+                vertices[face.a].push(face.normal);
+                vertices[face.b].push(face.normal);
+                vertices[face.c].push(face.normal);
+            });
+            geometry.faces.map(function (face) {
+                face.vertexNormals[0] = calcNormal(vertices[face.a], face.normal, angle);
+                face.vertexNormals[1] = calcNormal(vertices[face.b], face.normal, angle);
+                face.vertexNormals[2] = calcNormal(vertices[face.c], face.normal, angle);
+            });
+            if (geometry.faces.length > 0) geometry.normalsNeedUpdate = true;
+        };
+
+        THREE.FaceUtils = {
+            computeCentroid: function (face, vertices) {
+                var centroid = new THREE.Vector3();
+                centroid.add(vertices[face.a]);
+                centroid.add(vertices[face.b]);
+                centroid.add(vertices[face.c]);
+                centroid.divideScalar(3);
+                return centroid;
+            }
+        };
+
+    }
+
+    // ThreeUtils();
+
+    var app = angular.module('app');
+
+    app.service('ThreeUtils', [ThreeUtils]);
+
+}());
+/* global angular, window, document, console, TweenLite, Forge, Combiner, Orbiter, Library */
+
+(function () {
+    "use strict";
+
+    var app = angular.module('app');
+
+    app.directive('builder', ['Polyfills', 'Prototypes', 'ThreeUtils', function (Polyfills, Prototypes, ThreeUtils) {
+        return {
+            restrict: 'A',
+            link: function (scope, element, attributes) {
+                console.log('app.builder');
+                var container = element[0]; // document.querySelector('.editor');
+
+                if (!Detector.webgl) {
+                    Detector.addGetWebGLMessage();
+                    return;
+                }
+
+                var w = container.offsetWidth,
+                    h = container.offsetHeight;
+
+                var options = {
+                    down: false,
+                    moved: 0,
+                };
+
+                var raycaster = new THREE.Raycaster();
+
+                var forge = new Forge();
+
+                var renderer = addRenderer();
+
+                var library = new Library(renderer);
+
+                var camera = new THREE.PerspectiveCamera(45, w / h, 1, 50000);
+
+                var scene = new THREE.Scene();
+
+                var lights = addLights(scene);
+
+                var floor = addFloor(scene);
+
+                var combiner = new Combiner(scene);
+
+                var orbiter = new Orbiter(scene, camera);
+
+                var effects = new Effects(scene, camera, renderer, w, h);
+
+                function render() {
+                    combiner.update();
+                    //
+                    var y = combiner.center.y - combiner.size.y / 2 - 3;
+                    floor.position.y += (y - floor.position.y) / 8;
+                    // floor.position.x = combiner.center.x;
+                    // floor.position.z = combiner.center.z;
+                    lights.position.x += (combiner.center.x - lights.position.x) / 8;
+                    lights.position.y += (combiner.center.y - lights.position.y) / 8;
+                    lights.position.z += (combiner.center.z - lights.position.z) / 8;
+                    //
+                    orbiter.update();
+                    effects.update();
+                    // renderer.render(scene, camera);
+                }
+
+                function snapshot() {
+                    if (options.snapshot === true) {
+                        options.snapshot = false;
+                        /*
+                        Snapshot.post(scope.saber.code, renderer.domElement.toDataURL('image/jpeg', 0.95)).then(function (share) {
+                            scope.$root.$broadcast('onSocialPictureReady', share);
+                        });
+                        */
+                    }
+                }
+
+                function animate() {
+                    render();
+                    snapshot();
+                    options.requestId = window.requestAnimationFrame(animate, renderer.domElement);
+                }
+
+                function play() {
+                    if (!options.requestId) {
+                        animate();
+                    }
+                }
+
+                function pause() {
+                    if (options.requestId) {
+                        window.cancelAnimationFrame(options.requestId);
+                        options.requestId = false;
+                    }
+                }
+
+                function addRenderer() {
+                    var renderer = new THREE.WebGLRenderer({
+                        alpha: true,
+                        antialias: true,
+                    });
+                    renderer.setClearColor(0x101010);
+                    renderer.setPixelRatio(window.devicePixelRatio);
+                    renderer.setSize(w, h);
+                    container.appendChild(renderer.domElement);
+                    return renderer;
+                }
+
+                function addLights(scene) {
+                    var lights = new THREE.Group();
+                    lights.name = 'pivot';
+                    lights.rotation.y = Math.PI / 180 * 90;
+                    //
+                    var light = new THREE.AmbientLight(0x444444);
+                    scene.add(light);
+                    // 
+                    var light1 = new THREE.DirectionalLight(0xeedddd, 1.0, 2000);
+                    light1.name = 'light1';
+                    light1.position.set(-30, 20, 10);
+                    lights.add(light1);
+                    //
+                    var light2 = new THREE.DirectionalLight(0xddddee, 1.0, 2000);
+                    light2.name = 'light2';
+                    light2.position.set(30, 20, -10);
+                    lights.add(light2);
+                    //
+                    /*
+                    var light = new THREE.PointLight(0xddddee, 1, 2000);
+                    light.position.set(0, 200, 0);
+                    scene.add(light);
+                    */
+                    scene.add(lights);
+                    return lights;
+                }
+
+                function addFloor(scene) {
+                    /*
+                    var radius = 200;
+                    var radials = 16;
+                    var circles = 8;
+                    var divisions = 64;
+                    var floor = new THREE.PolarGridHelper(radius, radials, circles, divisions);
+                    */
+                    // var floor = new THREE.GridHelper(500, 500, 0x888888, 0xAAAAAA);
+                    // floor.rotateOnAxis( new THREE.Vector3( 1, 0, 0 ), 90 * ( Math.PI/180 ));	
+                    var floor = new THREE.Mesh(new THREE.PlaneBufferGeometry(500, 500), library.materials.floor);
+                    floor.name = 'floor';
+                    floor.rotation.x = -Math.PI / 2;
+                    floor.position.y = -3.5;
+                    floor.visible = true;
+                    scene.add(floor);
+                    return floor;
+                }
+
+                function onAdd() {
+                    if (!combiner.busy()) {
+                        forge.load(function (geometry, materials) {
+                            if (effects) effects.unselect();
+                            materials = library.updateMaterials(materials, null, null); // finish, secondaryFinish
+                            var item = combiner.add(geometry, materials);
+                            orbiter.fit(combiner);
+                            combiner.entering++;
+                            item.enter(function () {
+                                combiner.entering--;
+                            });
+                        });
+                    }
+                }
+
+                function onRemove() {
+                    if (!combiner.busy()) {
+                        combiner.remove();
+                        orbiter.fit(combiner);
+                    }
+                }
+
+                function onFlip() {
+                    combiner.flip(function () {
+                        orbiter.fit(combiner);
+                    });
+                }
+
+                function onFinish() {
+                    combiner.selectedModel(function (model) {
+                        model.material = library.setFinish(model.material, null);
+                    });
+                }
+
+                function onFloor() {
+                    library.setNextFloor();
+                }
+
+                function onResize() {
+                    w = container.offsetWidth;
+                    h = container.offsetHeight;
+                    camera.aspect = w / h;
+                    camera.updateProjectionMatrix();
+                    orbiter.fit(combiner);
+                    renderer.setSize(w, h);
+                    if (effects) effects.resize(w, h);
+                }
+
+                function onDown(e) {
+                    var down = getTouch(e);
+                    down.relativeTo(container);
+                    down.mx = down.x;
+                    down.startDragAngle = orbiter.dragAngle;
+                    down.startDistance = orbiter.distance;
+                    // console.log('down', down);
+                    raycaster.setFromCamera(down, camera);
+                    var selection = combiner.select(raycaster);
+                    // console.log('selection', selection);
+                    if (selection) {
+                        /*
+                        if (controls) {
+                            controls.enabled = false;
+                        }
+                        */
+                        down.index = selection.index;
+                        down.item = selection.item;
+                        down.rotation = selection.rotation;
+                        if (effects) effects.select(down.item.model);
+                    } else {
+                        if (effects) effects.unselect();
+                    }
+                    orbiter.fit(combiner);
+                    options.down = down;
+                    /*
+                    down.index = i;
+                    down.item = value;
+                    down.angle = value.coords.angle;
                     */
                 }
-            }
-            // orbiter.update();
-            orbiter.distance = Math.min(orbiter.distanceMax, Math.max(orbiter.distanceMin, orbiter.distance));
-            // scope.$root.$broadcast('onControls');
-        }
-    }
 
-    function onUp(e) {
-        var down = options.down;
-        var moved = options.moved;
-        if (down && moved < 5) {
-            if (down.item) {
+                function onMove(e) {
+                    options.moved++;
+                    var pow = 1; // 0.001;
+                    if (e.type === 'touchmove') {
+                        e.stopPropagation();
+                        e.preventDefault();
+                        pow *= 4;
+                    }
+                    var down = options.down;
+                    if (down) {
+                        var move = getTouch(e);
+                        move.relativeTo(container);
+                        var diff = move.sub(down);
+                        // console.log(diff.x, diff.y);
+                        if (move.count == 2 && down.count == 2) {
+                            // PINCH                   
+                            orbiter.distance = down.startDistance + (down.pinchSize() - move.pinchSize()) * pow * 10;
+                        } else {
+                            if (combiner.selection && combiner.selection.item === down.item) {
+                                // ROTATE ITEM
+                                // down.item.rotation = down.rotation + (move.y - down.y) * pow * 10;
+                                // var index = down.index;
+                                // down.item.outer.rotation.x = down.rotation.x + diff.y * Math.PI;
+                                combiner.rotate(diff.y * pow * 10);
+                            } else {
+                                // DRAG CAMERA
+                                orbiter.dragAngle = down.startDragAngle + diff.x * pow * 10;
+                                orbiter.distance = down.startDistance + diff.y * pow * -10;
+                                /*
+                                // SOUND
+                                if (combiner.selectedItem && combiner.selectedItem.type == APP.Parts.typeEnum.Sound) {
+                                    if (Math.abs(move.x - down.mx) > w / 3) {
+                                        down.mx = move.x;
+                                        scope.$root.$broadcast('onSoundSwing', scope.saber.sound, Math.abs(move.x - down.mx) / 100);
+                                    }
+                                }
+                                */
+                            }
+                        }
+                        // orbiter.update();
+                        orbiter.distance = Math.min(orbiter.distanceMax, Math.max(orbiter.distanceMin, orbiter.distance));
+                        // scope.$root.$broadcast('onControls');
+                    }
+                }
+
+                function onUp(e) {
+                    var down = options.down;
+                    var moved = options.moved;
+                    if (down && moved < 5) {
+                        if (down.item) {
+                            /*
+                            scope.$apply(function () {
+                                selectedIndex = down.index;
+                                onFocus(down.item);
+                            });
+                            */
+                        } else if (combiner.selectedItem) {
+                            /*
+                            scope.$apply(function () {
+                                onBlur();
+                            });
+                            */
+                        }
+                    }
+                    options.down = null;
+                    options.moved = 0;
+                    /*
+                    if (controls) {
+                        controls.enabled = true;
+                    }
+                    */
+                    removeDragListeners();
+                }
+
+                function onWheel(e) {
+                    e = window.event || e; // old IE support
+                    var bounds = container.getBounds();
+                    if (Math.abs(e.pageX - bounds.center.x) < bounds.width / 3) {
+                        var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
+                        orbiter.distance += delta;
+                        orbiter.distance = Math.min(orbiter.distanceMax, Math.max(orbiter.distanceMin, orbiter.distance));
+                        orbiter.update();
+                        e.preventDefault();
+                        // scope.$root.$broadcast('onControls');
+                    }
+                }
+
+                function onDoubleClick(e) {
+                    // console.log('onDoubleClick');
+                    var touch = getTouch(e);
+                    raycaster.setFromCamera(touch, camera);
+                    combiner.hitAndFlip(raycaster, function () {
+                        orbiter.fit(combiner);
+                    });
+                }
+
+                function onMouseDown(e) {
+                    onDown(e);
+                    addMouseListeners();
+                }
+
+                function onTouchDown(e) {
+                    onDown(e);
+                    addTouchListeners();
+                    e.stopPropagation();
+                    e.preventDefault();
+                }
+
+                function addMouseListeners() {
+                    window.addEventListener('mousemove', onMove);
+                    window.addEventListener('mouseup', onUp);
+                }
+
+                function addTouchListeners() {
+                    window.addEventListener('touchmove', onMove);
+                    window.addEventListener('touchend', onUp);
+                }
+
+                function removeDragListeners() {
+                    window.removeEventListener('touchmove mousemove', onMove);
+                    window.removeEventListener('touchend mouseup', onUp);
+                }
+
+                function onKeyUp(e) {
+                    // console.log(e);
+                    var selection;
+                    switch (e.keyCode) {
+                        case 38:
+                            // up arrow
+                            break;
+                        case 40:
+                            // down arrow
+                            break;
+                        case 37:
+                            // left arrow
+                            selection = combiner.prev();
+                            if (selection) {
+                                if (effects) effects.select(selection.item.model);
+                            } else {
+                                if (effects) effects.unselect();
+                            }
+                            orbiter.fit(combiner);
+                            break;
+                        case 39:
+                            // right arrow
+                            selection = combiner.next();
+                            if (selection) {
+                                if (effects) effects.select(selection.item.model);
+                            } else {
+                                if (effects) effects.unselect();
+                            }
+                            orbiter.fit(combiner);
+                            break;
+                    }
+                }
+
+                var btnAdd = document.querySelector('.btn-add');
+                var btnRemove = document.querySelector('.btn-remove');
+                var btnFlip = document.querySelector('.btn-flip');
+                var btnFinish = document.querySelector('.btn-finish');
+                var btnFloor = document.querySelector('.btn-floor');
+
+                function addListeners() {
+                    // container.addEventListener('dblclick', onDoubleClick);
+                    container.addEventListener('mousedown', onMouseDown);
+                    container.addEventListener('touchstart', onTouchDown);
+                    container.addEventListener('mousewheel', onWheel);
+                    document.addEventListener('keyup', onKeyUp);
+                    window.addEventListener('resize', onResize, false);
+                    btnAdd.addEventListener('click', onAdd);
+                    btnRemove.addEventListener('click', onRemove);
+                    btnFlip.addEventListener('click', onFlip);
+                    btnFinish.addEventListener('click', onFinish);
+                    btnFloor.addEventListener('click', onFloor);
+                }
+
+                function removeListeners() {
+                    // container.removeEventListener('dblclick', onDoubleClick);
+                    container.removeEventListener('mousedown', onMouseDown);
+                    container.removeEventListener('touchstart', onTouchDown);
+                    container.removeEventListener('mousewheel', onWheel);
+                    document.removeEventListener('keyup', onKeyUp);
+                    window.removeEventListener('resize', onResize);
+                    btnAdd.removeEventListener('click', onAdd);
+                    btnRemove.removeEventListener('click', onRemove);
+                    btnFlip.removeEventListener('click', onFlip);
+                    btnFinish.removeEventListener('click', onFinish);
+                    btnFloor.removeEventListener('click', onFloor);
+                }
+
+                animate();
+                addListeners();
+
+                setTimeout(onAdd, 1000);
+
                 /*
-                scope.$apply(function () {
-                    selectedIndex = down.index;
-                    onFocus(down.item);
+                scope.$on('onSelectPrev', function ($scope) {
+                });    
+                scope.$on('onSelectNext', function ($scope) {
+                });
+                scope.$on('onUpdateLed', function (scope, receivers, led) {
+                });
+                scope.$on('onFinishChange', function ($scope, part, id) {
+                });
+                scope.$on('onSecondaryFinishChange', function ($scope, part, id) {
+                });
+                scope.$on('onItemChange', function ($scope, part, id) {
+                });
+                scope.$on('onAddPart', function ($scope, part, id, counter) {
+                });
+                scope.$on('onPlayPause', function ($scope, pause) {
+                });
+                scope.$on('onRemovePart', function ($scope, part) {
+                });
+                scope.$on('onFlipPart', function ($scope, part) {
+                });
+                scope.$on('onSwapBackground', function ($scope) {
+                });
+                scope.$on('onRotationToggle', function ($scope) {
+                });
+                scope.$on('onSocialPictureGenerationRequest', function ($scope) {
+                    options.snapshot = true;
+                });
+                scope.$on('$destroy', function () {
+                    removeListeners();
                 });
                 */
-            } else if (combiner.selectedItem) {
-                /*
-                scope.$apply(function () {
-                    onBlur();
-                });
-                */
             }
-        }
-        options.down = null;
-        options.moved = 0;
-        /*
-        if (controls) {
-            controls.enabled = true;
-        }
-        */
-        removeListeners();
-    }
-
-    function onWheel(e) {
-        e = window.event || e; // old IE support
-        var bounds = container.getBounds();
-        if (Math.abs(e.pageX - bounds.center.x) < bounds.width / 3) {
-            var delta = Math.max(-1, Math.min(1, (e.wheelDelta || -e.detail)));
-            orbiter.distance += delta;
-            orbiter.distance = Math.min(orbiter.distanceMax, Math.max(orbiter.distanceMin, orbiter.distance));
-            orbiter.update();
-            e.preventDefault();
-            // scope.$root.$broadcast('onControls');
-        }
-    }
-
-    function onDoubleClick(e) {
-        // console.log('onDoubleClick');
-        var touch = getTouch(e);
-        raycaster.setFromCamera(touch, camera);
-        combiner.hitAndFlip(raycaster, function () {
-            orbiter.fit(combiner);
-        });
-    }
-
-    function onMouseDown(e) {
-        onDown(e);
-        addMouseListeners();
-    }
-
-    function onTouchDown(e) {
-        onDown(e);
-        addTouchListeners();
-        e.stopPropagation();
-        e.preventDefault();
-    }
-
-    function addMouseListeners() {
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
-    }
-
-    function addTouchListeners() {
-        window.addEventListener('touchmove', onMove);
-        window.addEventListener('touchend', onUp);
-    }
-
-    function removeListeners() {
-        window.removeEventListener('touchmove mousemove', onMove);
-        window.removeEventListener('touchend mouseup', onUp);
-    }
-
-    function onKeyUp(e) {
-        // console.log(e);
-        switch (e.keyCode) {
-            case 38:
-                // up arrow
-                break;
-            case 40:
-                // down arrow
-                break;
-            case 37:
-                // left arrow
-                var selection = combiner.prev();
-                if (selection) {
-                    if (effects) effects.select(selection.item.model);
-                } else {
-                    if (effects) effects.unselect();
-                }
-                orbiter.fit(combiner);
-                break;
-            case 39:
-                // right arrow
-                var selection = combiner.next();
-                if (selection) {
-                    if (effects) effects.select(selection.item.model);
-                } else {
-                    if (effects) effects.unselect();
-                }
-                orbiter.fit(combiner);
-                break;
-        }
-    }
-
-    // container.addEventListener('dblclick', onDoubleClick);
-    container.addEventListener('mousedown', onMouseDown);
-    container.addEventListener('touchstart', onTouchDown);
-    container.addEventListener('mousewheel', onWheel);
-
-    document.addEventListener('keyup', onKeyUp);
-
-    window.addEventListener('resize', onResize, false);
-
-    var btnAdd = document.querySelector('.btn-add');
-    var btnRemove = document.querySelector('.btn-remove');
-    var btnFlip = document.querySelector('.btn-flip');
-    var btnFinish = document.querySelector('.btn-finish');
-    var btnFloor = document.querySelector('.btn-floor');
-    btnAdd.addEventListener('click', onAdd);
-    btnRemove.addEventListener('click', onRemove);
-    btnFlip.addEventListener('click', onFlip);
-    btnFinish.addEventListener('click', onFinish);
-    btnFloor.addEventListener('click', onFloor);
-
-    animate();
-
-    setTimeout(onAdd, 1000);
+        };
+    }]);
 
 }());

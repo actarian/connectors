@@ -1,4 +1,4 @@
-/* global window, document, console, TweenLite */
+/* global angular, window, document, console, TweenLite */
 
 (function () {
     'use strict';
@@ -191,5 +191,11 @@
     }();
 
     window.Orbiter = Orbiter;
+
+    var app = angular.module('app');
+
+    app.factory('Orbiter', [function () {
+        return Orbiter;
+    }]);
 
 }());

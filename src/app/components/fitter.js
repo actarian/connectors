@@ -1,4 +1,4 @@
-/* global window, document, console, TweenLite */
+/* global angular, window, document, console, TweenLite */
 
 (function () {
     'use strict';
@@ -187,5 +187,11 @@
     }();
 
     window.Fitter = Fitter;
+
+    var app = angular.module('app');
+
+    app.factory('Fitter', [function () {
+        return Fitter;
+    }]);
 
 }());

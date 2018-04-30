@@ -1,4 +1,4 @@
-/* global window, document, console, TweenLite */
+/* global angular, window, document, console, TweenLite */
 
 (function () {
     'use strict';
@@ -63,579 +63,274 @@
             var service = this,
                 manager = this.manager,
                 loader = this.loader,
-                textures = this.textures,
-                materials;
-            if (USE_PHONG) {
-                materials = {
-                    floor: new THREE.MeshPhongMaterial({
-                        bumpMap: textures.floor,
-                        bumpScale: 0.05,
-                        color: 0x101010,
-                        specular: 0x101010,
-                        reflectivity: 0.15,
-                        shininess: 12,
-                        // metal: true,
-                    }),
-                    wrap: new THREE.MeshPhongMaterial({
-                        name: 'wrap',
-                        color: 0x101010,
-                        specular: 0x444444,
-                        shininess: 7,
-                        reflectivity: 0.75,
-                        specularMap: textures.leatherLight,
-                        bumpMap: textures.leatherBump,
-                        bumpScale: 0.15,
-                        combine: THREE.MixOperation,
-                        // metal: true,
-                    }),
-                    bronze: new THREE.MeshPhongMaterial({
-                        name: 'bronze',
-                        color: 0xc07f5d,
-                        specular: 0x555555,
-                        specularMap: textures.silver,
-                        shininess: 10,
-                        reflectivity: 0.20,
-                        envMap: textures.env,
-                        combine: THREE.MixOperation,
-                        bumpMap: textures.silver,
-                        bumpScale: 0.001,
-                        // metal: true,
-                    }),
-                    gold: new THREE.MeshPhongMaterial({
-                        name: 'gold',
-                        color: 0xc8ad60,
-                        specular: 0x555555,
-                        specularMap: textures.silver,
-                        shininess: 10,
-                        reflectivity: 0.20,
-                        envMap: textures.env,
-                        combine: THREE.MixOperation,
-                        bumpMap: textures.silver,
-                        bumpScale: 0.001,
-                        // metal: true,
-                    }),
-                    green: new THREE.MeshPhongMaterial({
-                        name: 'green',
-                        color: 0x00aa00,
-                        specular: 0x333333,
-                        specularMap: textures.silver,
-                        shininess: 30,
-                        reflectivity: 0.10,
-                        envMap: textures.env,
-                        combine: THREE.MixOperation,
-                        bumpMap: textures.silver,
-                        bumpScale: 0.003,
-                        // metal: true,
-                    }),
-                    red: new THREE.MeshPhongMaterial({
-                        name: 'red',
-                        color: 0xdd0000,
-                        specular: 0x333333,
-                        specularMap: textures.silver,
-                        shininess: 30,
-                        reflectivity: 0.10,
-                        envMap: textures.env,
-                        combine: THREE.MixOperation,
-                        bumpMap: textures.silver,
-                        bumpScale: 0.003,
-                        // metal: true,
-                    }),
-                    standard: {
-                        silver: new THREE.MeshPhongMaterial({
-                            name: 'silver',
-                            color: 0x888888,
-                            specular: 0x555555,
-                            specularMap: textures.silver,
-                            shininess: 30,
-                            reflectivity: 0.15,
-                            envMap: textures.env,
-                            combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                        }),
-                        black: new THREE.MeshPhongMaterial({ // MeshLambertMaterial
-                            name: 'black',
-                            color: 0x0d0d0d, // 0x0d0d0d
-                            reflectivity: 0.3,
-                            envMap: textures.env,
-                            combine: THREE.MultiplyOperation
-                        }),
-                    },
-                    weathered: {
-                        silver: new THREE.MeshPhongMaterial({
-                            name: 'silver',
-                            color: 0x444444,
-                            specular: 0x555555,
-                            specularMap: textures.weathered,
-                            shininess: 90,
-                            reflectivity: 0.15,
-                            envMap: textures.env,
-                            combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                            map: textures.weathered,
-                            roughness: 0.2,
-                            // roughnessMap: textures.silver,
-                            metalness: 0.5,
-                            metalnessMap: textures.weathered,
-                        }),
-                        black: new THREE.MeshPhongMaterial({
-                            name: 'black',
-                            color: 0x333333,
-                            specular: 0x444444,
-                            specularMap: textures.weathered,
-                            shininess: 90,
-                            reflectivity: 0.05,
-                            envMap: textures.env,
-                            combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                            map: textures.weathered,
-                            roughness: 1.4,
-                            roughnessMap: textures.weathered,
-                            metalness: 0.5,
-                            metalnessMap: textures.silver,
-                        }),
-                        /*
-                        black: new THREE.MeshLambertMaterial({
-                            name: 'black',
-                            color: 0x070707, // 0x070707
-                            specular: 0x0a0a0a,
-                            reflectivity: 0.05,
-                            envMap: textures.env,
-                            combine: THREE.MultiplyOperation
-                        }),
-                        */
-                    },
-                    black: {
-                        silver: new THREE.MeshPhongMaterial({
-                            name: 'silver',
-                            color: 0x070707, // 0x070707
-                            specular: 0x0a0a0a,
-                            reflectivity: 0.05,
-                            envMap: textures.env,
-                            combine: THREE.MultiplyOperation
-                        }),
-                        black: new THREE.MeshPhongMaterial({ // MeshLambertMaterial
-                            name: 'black',
-                            color: 0x060606, // 0x060606
-                            specular: 0x0a0a0a,
-                            reflectivity: 0.05,
-                            envMap: textures.env,
-                            combine: THREE.MultiplyOperation
-                        }),
-                    },
-                    light: {
-                        off: new THREE.MeshPhongMaterial({
-                            name: 'light',
-                            opacity: 0.98,
-                            transparent: true,
-                            color: 0x444444,
-                            specular: 0x888888,
-                            shininess: 20,
-                            reflectivity: 0.3
-                        }),
-                        on6: new THREE.MeshPhongMaterial({
-                            name: 'light',
-                            opacity: 0.98,
-                            transparent: true,
-                            color: 0x444444,
-                            emissive: 0x444444,
-                            specular: 0x888888,
-                            shininess: 20,
-                            reflectivity: 0.3
-                        }),
-                        on12: new THREE.MeshPhongMaterial({
-                            name: 'light',
-                            color: 0xffffff,
-                            emissive: 0x888888,
-                            specular: 0xffffff,
-                            shininess: 100,
-                            reflectivity: 0.3
-                        }),
-                    },
-                    glare: {
-                        off: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0,
-                            transparent: true,
-                            color: 0x000000,
-                        }),
-                        on6: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.6,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.glare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 0,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                        on12: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.85,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.glare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 0,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                    },
-                    emitterGlare: {
-                        off: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0,
-                            transparent: true,
-                            color: 0x000000,
-                        }),
-                        on6: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.6,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.emitterGlare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 0,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                        on12: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.85,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.emitterGlare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 100,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                    },
-                    /*
-                    silver: {
-                        silver: new THREE.MeshPhongMaterial({
-                            name: 'silver',
-                            color: 0x888888,
-                            specular: 0x555555,
-                            specularMap: textures.silver,
-                            shininess: 30,
-                            reflectivity: 0.15,
-                            envMap: textures.env,
-                            // combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                        }),
-                        black: new THREE.MeshPhongMaterial({
-                            name: 'black',
-                            color: 0x777777,
-                            specular: 0x444444,
-                            specularMap: textures.silver,
-                            shininess: 30,
-                            reflectivity: 0.15,
-                            envMap: textures.env,
-                            // combine: THREE.MixOperation,
-                            bumpMap: textures.silver,
-                            bumpScale: 0.003,
-                            // metal: true,
-                        }),
-                    },
-                    */
-                };
-            } else {
-                materials = {
-                    floor: new THREE.MeshStandardMaterial({
-                        name: 'floor',
-                        color: 0x101010, // 0xaeb7c1, // 0x101010,
-                        roughness: 0.5, // 0.4,
-                        metalness: 0.1, // 0.99,
-                        bumpMap: textures.floor,
-                        bumpScale: 0.05,
-                        envMap: textures.env,
-                        // combine: THREE.MixOperation,
-                    }),
-                    wrap: new THREE.MeshPhongMaterial({
-                        name: 'wrap',
-                        color: 0x101010,
-                        specular: 0x444444,
-                        shininess: 7,
-                        reflectivity: 0.75,
-                        specularMap: textures.leatherLight,
-                        bumpMap: textures.leatherBump,
-                        bumpScale: 0.15,
-                        // combine: THREE.MixOperation,
-                        // metal: true,
-                    }),
-                    bronze: new THREE.MeshStandardMaterial({
-                        name: 'bronze',
-                        color: 0xc07f5d,
-                        roughness: 0.5,
-                        roughnessMap: textures.silver,
-                        metalness: 0.9,
-                        metalnessMap: textures.weathered,
-                        envMap: textures.env,
-                        envMapIntensity: 0.15,
-                        // combine: THREE.MixOperation,
-                        // bumpMap: textures.silver,
-                        // bumpScale: 0.003,
-                    }),
-                    gold: new THREE.MeshStandardMaterial({
-                        name: 'gold',
-                        color: 0xc8ad60,
-                        roughness: 0.5,
-                        roughnessMap: textures.silver,
-                        metalness: 0.9,
-                        metalnessMap: textures.weathered,
-                        envMap: textures.env,
-                        envMapIntensity: 0.15,
-                        // combine: THREE.MixOperation,
-                        // bumpMap: textures.silver,
-                        // bumpScale: 0.003,
-                    }),
-                    green: new THREE.MeshPhongMaterial({
-                        name: 'green',
-                        color: 0x00aa00,
-                        specular: 0x333333,
-                        specularMap: textures.silver,
-                        shininess: 30,
-                        reflectivity: 0.10,
-                        envMap: textures.env,
-                        // combine: THREE.MixOperation,
-                        bumpMap: textures.silver,
-                        bumpScale: 0.003,
-                        // metal: true,
-                    }),
-                    red: new THREE.MeshPhongMaterial({
-                        name: 'red',
-                        color: 0xdd0000,
-                        specular: 0x333333,
-                        specularMap: textures.silver,
-                        shininess: 30,
-                        reflectivity: 0.10,
-                        envMap: textures.env,
-                        // combine: THREE.MixOperation,
-                        bumpMap: textures.silver,
-                        bumpScale: 0.003,
-                        // metal: true,
-                    }),
-                    standard: {
-                        silver: new THREE.MeshStandardMaterial({
-                            name: 'silver',
-                            color: 0x888888,
-                            roughness: 0.4,
-                            // roughnessMap: textures.brushed,
-                            metalness: 0.99,
-                            metalnessMap: textures.brushed,
-                            envMap: textures.env,
-                            envMapIntensity: 1.0,
-                            bumpMap: textures.brushed,
-                            bumpScale: 0.01,
-                        }),
-                        black: new THREE.MeshStandardMaterial({
-                            name: 'black',
-                            color: 0x101010,
-                            roughness: 0.5,
-                            // roughnessMap: textures.sand,
-                            metalness: 0.99,
-                            metalnessMap: textures.sand,
-                            envMap: textures.env,
-                            envMapIntensity: 1.0,
-                            bumpMap: textures.sand,
-                            bumpScale: 0.015,
-                        }),
-                    },
-                    weathered: {
-                        silver: getWeatheredNode('silver', textures),
-                        black: getWeatheredNode('black', textures),
-                        _silver: new THREE.MeshStandardMaterial({
-                            name: 'silver',
-                            color: 0x555555,
-                            map: textures.brushed,
-                            roughness: 0.6,
-                            roughnessMap: textures.weatheredInverted,
-                            metalness: 0.99,
-                            // metalnessMap: textures.weathered,
-                            envMap: textures.env,
-                            envMapIntensity: 1.0,
-                            // bumpMap: textures.sand,
-                            // bumpScale: 0.01,
-                        }),
-                        _black: new THREE.MeshStandardMaterial({
-                            name: 'black',
-                            color: 0x444444,
-                            map: textures.brushed,
-                            roughness: 0.6,
-                            roughnessMap: textures.weatheredInverted,
-                            metalness: 0.99,
-                            // metalnessMap: textures.weathered,
-                            envMap: textures.env,
-                            envMapIntensity: 1.0,
-                            // bumpMap: textures.sand,
-                            // bumpScale: 0.01,
-                        }),
-                        /*
-                        black: new THREE.MeshLambertMaterial({
-                            name: 'black',
-                            color: 0x070707, // 0x070707
-                            specular: 0x0a0a0a,
-                            reflectivity: 0.05,
-                            envMap: textures.env,
-                            combine: THREE.MultiplyOperation
-                        }),
-                        */
-                    },
-                    black: {
-                        silver: new THREE.MeshStandardMaterial({
-                            name: 'silver',
-                            color: 0x131313,
-                            roughness: 0.5,
-                            // roughnessMap: textures.sand,
-                            metalness: 0.99,
-                            metalnessMap: textures.sand,
-                            envMap: textures.env,
-                            envMapIntensity: 1.0,
-                            bumpMap: textures.sand,
-                            bumpScale: 0.015,
-                        }),
-                        black: new THREE.MeshStandardMaterial({
-                            name: 'black',
-                            color: 0x101010,
-                            roughness: 0.5,
-                            // roughnessMap: textures.sand,
-                            metalness: 0.99,
-                            metalnessMap: textures.sand,
-                            envMap: textures.env,
-                            envMapIntensity: 1.0,
-                            bumpMap: textures.sand,
-                            bumpScale: 0.015,
-                        }),
-                    },
-                    light: {
-                        off: new THREE.MeshPhongMaterial({
-                            name: 'light',
-                            opacity: 0.98,
-                            transparent: true,
-                            color: 0x444444,
-                            specular: 0x888888,
-                            shininess: 20,
-                            reflectivity: 0.3
-                        }),
-                        on6: new THREE.MeshPhongMaterial({
-                            name: 'light',
-                            opacity: 0.98,
-                            transparent: true,
-                            color: 0x444444,
-                            emissive: 0x444444,
-                            specular: 0x888888,
-                            shininess: 20,
-                            reflectivity: 0.3
-                        }),
-                        on12: new THREE.MeshPhongMaterial({
-                            name: 'light',
-                            color: 0xffffff,
-                            emissive: 0x888888,
-                            specular: 0xffffff,
-                            shininess: 100,
-                            reflectivity: 0.3
-                        }),
-                    },
-                    glare: {
-                        off: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0,
-                            transparent: true,
-                            color: 0x000000,
-                        }),
-                        on6: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.6,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.glare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 0,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                        on12: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.85,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.glare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 0,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                    },
-                    emitterGlare: {
-                        off: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0,
-                            transparent: true,
-                            color: 0x000000,
-                        }),
-                        on6: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.6,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.emitterGlare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 0,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                        on12: new THREE.MeshLambertMaterial({
-                            name: 'glare',
-                            opacity: 0.85,
-                            transparent: true,
-                            color: 0xecf4fb,
-                            map: textures.emitterGlare,
-                            blending: THREE.AdditiveBlending,
-                            specular: 0x000000,
-                            shininess: 100,
-                            combine: THREE.MixOperation,
-                            reflectivity: 0
-                        }),
-                    },
-                };
-            }
-            materials.left = new THREE.MeshPhongMaterial({
-                name: 'left',
-                color: new THREE.Color(0xff0000),
-                visible: false,
-            });
-            materials.right = new THREE.MeshPhongMaterial({
-                name: 'right',
-                color: new THREE.Color(0x00ff00),
-                visible: false,
-            });
-            materials.top = new THREE.MeshPhongMaterial({
-                name: 'top',
-                color: new THREE.Color(0x0000ff),
-                visible: false,
-            });
-            materials.bottom = new THREE.MeshPhongMaterial({
-                name: 'bottom',
-                color: new THREE.Color(0xffff00),
-                visible: false,
-            });
+                textures = this.textures;
 
+            var materials = {
+                left: new THREE.MeshPhongMaterial({
+                    name: 'left',
+                    color: new THREE.Color(0xff0000),
+                    visible: false,
+                }),
+                right: new THREE.MeshPhongMaterial({
+                    name: 'right',
+                    color: new THREE.Color(0x00ff00),
+                    visible: false,
+                }),
+                top: new THREE.MeshPhongMaterial({
+                    name: 'top',
+                    color: new THREE.Color(0x0000ff),
+                    visible: false,
+                }),
+                bottom: new THREE.MeshPhongMaterial({
+                    name: 'bottom',
+                    color: new THREE.Color(0xffff00),
+                    visible: false,
+                }),
+                floor: new THREE.MeshStandardMaterial({
+                    name: 'floor',
+                    color: 0x101010, // 0xaeb7c1, // 0x101010,
+                    roughness: 0.5, // 0.4,
+                    metalness: 0.1, // 0.99,
+                    bumpMap: textures.floor,
+                    bumpScale: 0.05,
+                    envMap: textures.env,
+                }),
+                wrap: new THREE.MeshPhongMaterial({
+                    name: 'wrap',
+                    color: 0x101010,
+                    specular: 0x444444,
+                    shininess: 7,
+                    reflectivity: 0.75,
+                    specularMap: textures.leatherLight,
+                    bumpMap: textures.leatherBump,
+                    bumpScale: 0.15,
+                    // metal: true,
+                }),
+                bronze: new THREE.MeshStandardMaterial({
+                    name: 'bronze',
+                    color: 0xc07f5d,
+                    roughness: 0.5,
+                    roughnessMap: textures.silver,
+                    metalness: 0.9,
+                    metalnessMap: textures.weathered,
+                    envMap: textures.env,
+                    envMapIntensity: 0.15,
+                    // bumpMap: textures.silver,
+                    // bumpScale: 0.003,
+                }),
+                gold: new THREE.MeshStandardMaterial({
+                    name: 'gold',
+                    color: 0xc8ad60,
+                    roughness: 0.5,
+                    roughnessMap: textures.silver,
+                    metalness: 0.9,
+                    metalnessMap: textures.weathered,
+                    envMap: textures.env,
+                    envMapIntensity: 0.15,
+                    // bumpMap: textures.silver,
+                    // bumpScale: 0.003,
+                }),
+                green: new THREE.MeshPhongMaterial({
+                    name: 'green',
+                    color: 0x00aa00,
+                    specular: 0x333333,
+                    specularMap: textures.silver,
+                    shininess: 30,
+                    reflectivity: 0.10,
+                    envMap: textures.env,
+                    // combine: THREE.MixOperation,
+                    bumpMap: textures.silver,
+                    bumpScale: 0.003,
+                    // metal: true,
+                }),
+                red: new THREE.MeshPhongMaterial({
+                    name: 'red',
+                    color: 0xdd0000,
+                    specular: 0x333333,
+                    specularMap: textures.silver,
+                    shininess: 30,
+                    reflectivity: 0.10,
+                    envMap: textures.env,
+                    bumpMap: textures.silver,
+                    bumpScale: 0.003,
+                    // metal: true,
+                }),
+                standard: {
+                    silver: new THREE.MeshStandardMaterial({
+                        name: 'silver',
+                        color: 0x888888,
+                        roughness: 0.4,
+                        // roughnessMap: textures.brushed,
+                        metalness: 0.99,
+                        metalnessMap: textures.brushed,
+                        envMap: textures.env,
+                        envMapIntensity: 1.0,
+                        bumpMap: textures.brushed,
+                        bumpScale: 0.01,
+                    }),
+                    black: new THREE.MeshStandardMaterial({
+                        name: 'black',
+                        color: 0x101010,
+                        roughness: 0.5,
+                        // roughnessMap: textures.sand,
+                        metalness: 0.99,
+                        metalnessMap: textures.sand,
+                        envMap: textures.env,
+                        envMapIntensity: 1.0,
+                        bumpMap: textures.sand,
+                        bumpScale: 0.015,
+                    }),
+                },
+                weathered: {
+                    silver: getWeatheredNode('silver', textures),
+                    black: getWeatheredNode('black', textures),
+                    _silver: new THREE.MeshStandardMaterial({
+                        name: 'silver',
+                        color: 0x555555,
+                        map: textures.brushed,
+                        roughness: 0.6,
+                        roughnessMap: textures.weatheredInverted,
+                        metalness: 0.99,
+                        // metalnessMap: textures.weathered,
+                        envMap: textures.env,
+                        envMapIntensity: 1.0,
+                        // bumpMap: textures.sand,
+                        // bumpScale: 0.01,
+                    }),
+                    _black: new THREE.MeshStandardMaterial({
+                        name: 'black',
+                        color: 0x444444,
+                        map: textures.brushed,
+                        roughness: 0.6,
+                        roughnessMap: textures.weatheredInverted,
+                        metalness: 0.99,
+                        // metalnessMap: textures.weathered,
+                        envMap: textures.env,
+                        envMapIntensity: 1.0,
+                        // bumpMap: textures.sand,
+                        // bumpScale: 0.01,
+                    }),
+                },
+                black: {
+                    silver: new THREE.MeshStandardMaterial({
+                        name: 'silver',
+                        color: 0x131313,
+                        roughness: 0.5,
+                        // roughnessMap: textures.sand,
+                        metalness: 0.99,
+                        metalnessMap: textures.sand,
+                        envMap: textures.env,
+                        envMapIntensity: 1.0,
+                        bumpMap: textures.sand,
+                        bumpScale: 0.015,
+                    }),
+                    black: new THREE.MeshStandardMaterial({
+                        name: 'black',
+                        color: 0x101010,
+                        roughness: 0.5,
+                        // roughnessMap: textures.sand,
+                        metalness: 0.99,
+                        metalnessMap: textures.sand,
+                        envMap: textures.env,
+                        envMapIntensity: 1.0,
+                        bumpMap: textures.sand,
+                        bumpScale: 0.015,
+                    }),
+                },
+                light: {
+                    off: new THREE.MeshPhongMaterial({
+                        name: 'light',
+                        opacity: 0.98,
+                        transparent: true,
+                        color: 0x444444,
+                        specular: 0x888888,
+                        shininess: 20,
+                        reflectivity: 0.3
+                    }),
+                    on6: new THREE.MeshPhongMaterial({
+                        name: 'light',
+                        opacity: 0.98,
+                        transparent: true,
+                        color: 0x444444,
+                        emissive: 0x444444,
+                        specular: 0x888888,
+                        shininess: 20,
+                        reflectivity: 0.3
+                    }),
+                    on12: new THREE.MeshPhongMaterial({
+                        name: 'light',
+                        color: 0xffffff,
+                        emissive: 0x888888,
+                        specular: 0xffffff,
+                        shininess: 100,
+                        reflectivity: 0.3
+                    }),
+                },
+                glare: {
+                    off: new THREE.MeshLambertMaterial({
+                        name: 'glare',
+                        opacity: 0,
+                        transparent: true,
+                        color: 0x000000,
+                    }),
+                    on6: new THREE.MeshLambertMaterial({
+                        name: 'glare',
+                        opacity: 0.6,
+                        transparent: true,
+                        color: 0xecf4fb,
+                        map: textures.glare,
+                        blending: THREE.AdditiveBlending,
+                        specular: 0x000000,
+                        shininess: 0,
+                        combine: THREE.MixOperation,
+                        reflectivity: 0
+                    }),
+                    on12: new THREE.MeshLambertMaterial({
+                        name: 'glare',
+                        opacity: 0.85,
+                        transparent: true,
+                        color: 0xecf4fb,
+                        map: textures.glare,
+                        blending: THREE.AdditiveBlending,
+                        specular: 0x000000,
+                        shininess: 0,
+                        combine: THREE.MixOperation,
+                        reflectivity: 0
+                    }),
+                },
+                emitterGlare: {
+                    off: new THREE.MeshLambertMaterial({
+                        name: 'glare',
+                        opacity: 0,
+                        transparent: true,
+                        color: 0x000000,
+                    }),
+                    on6: new THREE.MeshLambertMaterial({
+                        name: 'glare',
+                        opacity: 0.6,
+                        transparent: true,
+                        color: 0xecf4fb,
+                        map: textures.emitterGlare,
+                        blending: THREE.AdditiveBlending,
+                        specular: 0x000000,
+                        shininess: 0,
+                        combine: THREE.MixOperation,
+                        reflectivity: 0
+                    }),
+                    on12: new THREE.MeshLambertMaterial({
+                        name: 'glare',
+                        opacity: 0.85,
+                        transparent: true,
+                        color: 0xecf4fb,
+                        map: textures.emitterGlare,
+                        blending: THREE.AdditiveBlending,
+                        specular: 0x000000,
+                        shininess: 100,
+                        combine: THREE.MixOperation,
+                        reflectivity: 0
+                    }),
+                },
+            };
             return materials;
         }
 
@@ -869,39 +564,66 @@
             });
         }
 
+        function materialTween(from, to, callback) {
+            var options = {
+                onComplete: function () {
+                    if (typeof callback === 'function') {
+                        callback();
+                    }
+                }
+            };
+            for (var p in to) {
+                if (p === 'color') {
+                    var color = new THREE.Color(to.color);
+                    options[p] = {
+                        r: color.r,
+                        g: color.g,
+                        b: color.b
+                    };
+                } else {
+                    options[p] = to[p];
+                }
+            }
+            TweenLite.to(from, 0.4, options);
+        }
+
         function setNextFloor() {
             var service = this,
                 materials = this.materials,
                 floor = this.materials.floor;
             Library.FLOOR = (Library.FLOOR + 1) % 4;
+            var to = {};
             switch (Library.FLOOR) {
                 case 0:
-                    floor.color.set(0x101010);
-                    floor.roughness = 0.5;
-                    floor.metalness = 0.1;
-                    floor.bumpScale = 0.05;
+                    to.color = 0x101010;
+                    to.roughness = 0.5;
+                    to.metalness = 0.1;
+                    to.bumpScale = 0.05;
                     break;
                 case 1:
-                    floor.color.set(0xaeb7c1);
-                    floor.roughness = 0.5;
-                    floor.metalness = 0.1;
-                    floor.bumpScale = 0.05;
+                    to.color = 0xaeb7c1;
+                    to.roughness = 0.5;
+                    to.metalness = 0.1;
+                    to.bumpScale = 0.05;
                     break;
                 case 2:
-                    floor.color.set(0x101010);
-                    floor.roughness = 0.5;
-                    floor.metalness = 0.1;
-                    floor.bumpScale = 0.0001;
+                    to.color = 0x101010;
+                    to.roughness = 0.5;
+                    to.metalness = 0.1;
+                    to.bumpScale = 0.0001;
                     break;
                 case 3:
-                    floor.color.set(0xaeb7c1);
-                    floor.roughness = 0.5;
-                    floor.metalness = 0.1;
-                    floor.bumpScale = 0.0001;
+                    to.color = 0xaeb7c1;
+                    to.roughness = 0.5;
+                    to.metalness = 0.1;
+                    to.bumpScale = 0.0001;
                     break;
             }
             console.log('library.setNextFloor', Library.FLOOR);
-            floor.needsUpdate = true;
+            materialTween(floor, to, function () {
+                console.log('materialTween.completed');
+            });
+            // floor.needsUpdate = true;
         }
 
         function updateMaterials(materials, finish, secondaryFinish) {
@@ -1107,5 +829,11 @@
     }();
 
     window.Library = Library;
+
+    var app = angular.module('app');
+
+    app.factory('Library', [function () {
+        return Library;
+    }]);
 
 }());

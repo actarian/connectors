@@ -1,29 +1,7 @@
-/* global window, document, console, TweenLite */
+/* global angular, window, document, console, TweenLite */
 
 (function () {
     'use strict';
-
-    /* 
-    <script id="vertexShaderRaw" type="x-shader/x-vertex">
-        attribute float curvature;
-        varying float vCurvature;
-        void main() {
-            vec3 p = position;
-            vec4 modelViewPosition = modelViewMatrix * vec4( p , 1.0 );
-            gl_Position = projectionMatrix * modelViewPosition;
-            vCurvature = curvature;
-        }
-    </script>
-    */
-    /*
-    <script id="fragmentShaderRaw" type="x-shader/x-fragment">
-        varying vec3 vViewPosition;
-        varying float vCurvature;
-        void main() {
-            gl_FragColor = vec4( vCurvature * 2.0, 0.0, 0.0, 0.0 );
-        }
-    </script>
-    */
 
     var Curvature = function () {
 
@@ -126,40 +104,251 @@
                 attribute[i] = f;
             }
 
-            // var filtered = new Float32Array(attribute);
-            // filterConvex(filtered);
             geometry.addAttribute('curvature', new THREE.BufferAttribute(attribute, 1));
-
-            /*
-            var filtered = new Float32Array(attribute);
-            filterConvex(filtered);
-            geometry.attributes.curvature.array = filtered;
-            geometry.attributes.curvature.needsUpdate = true;
-            */
-
-            /*
-            var materialRaw = new THREE.ShaderMaterial({
-                vertexShader: document.getElementById('vertexShaderRaw').textContent,
-                fragmentShader: document.getElementById('fragmentShaderRaw').textContent
-            });
-
-            ninjaMeshRaw = new THREE.Mesh(geometry, materialRaw);
-            //init GUI
-            var filtered = new Float32Array(attribute);
-            filterConvex(filtered);
-            geometry.attributes.curvature.array = filtered;
-            geometry.attributes.curvature.needsUpdate = true;
-            */
         }
 
-        function setEdges(geometry, thresholdAngle) {
+        function setEdges(geometry, angleThresold) {
+            angleThresold = angleThresold || 95;
+
+            var faces = geometry.faces,
+                vertices = geometry.vertices,
+                face, centroid;
+            geometry = new THREE.BufferGeometry().fromGeometry(geometry);
+            var dEdge = {},
+                edge, key, i, ia, ib, ic, va, vb, vc, pa, pb, pc, sa, sb, sc, na, nb, nc, ma, mb,
+                dot, cross, angle;
+            var positions = geometry.attributes.position.array;
+            var normals = geometry.attributes.normal.array;
+
+            function addKey(ia, ib, sa, sb, pa, pb, i, ca) {
+                ma = Math.min(ia, ib); // minimun vertex index
+                mb = Math.max(ia, ib); // maximum vertex index
+                key = ma + '-' + mb;
+                if (dEdge[key] === undefined) {
+                    dEdge[key] = {
+                        sa: sa, // string key vertex a
+                        sb: sb, // string key vertex b
+                        na: pa, // index normal a
+                        ca: ca, // centroid face a
+                        fa: i, // index face a
+                        fb: undefined
+                    };
+                } else {
+                    dEdge[key].nb = pa; // index normal b (pa or pb should be indifferently)
+                    dEdge[key].fb = i; // index face b
+                    dEdge[key].cb = ca; // centroid face b
+                }
+            }
+
+            for (var f = 0; f < faces.length; f++) {
+                face = faces[f];
+                centroid = THREE.FaceUtils.computeCentroid(face, vertices);
+                // vertex indices
+                ia = face.a;
+                ib = face.b;
+                ic = face.c;
+                // vertices
+                va = vertices[ia];
+                vb = vertices[ib];
+                vc = vertices[ic];
+                // dVert keys
+                sa = va.toArray().toString();
+                sb = vb.toArray().toString();
+                sc = vc.toArray().toString();
+                i = f * 9; // position face index                
+                pa = i; // position vert a index
+                pb = i + 3; // position vert b index
+                pc = i + 6; // position vert c index
+                // dEdge keys
+                addKey(ia, ib, sa, sb, pa, pb, i, centroid); // key edge a-b
+                addKey(ib, ic, sb, sc, pb, pc, i, centroid); // key edge b-c
+                addKey(ic, ia, sc, sa, pc, pa, i, centroid); // key edge c-a
+            }
+
+            var curvatures = new Array(geometry.attributes.position.count).fill(0.0);
+
+            var edges = Object.keys(dEdge);
+            var matches = 0;
+
+            var dVert = {};
+
+            for (key in dEdge) {
+                edge = dEdge[key];
+                if (edge.nb) {
+                    na = edge.na;
+                    nb = edge.nb;
+                    va = new THREE.Vector3(normals[na], normals[na + 1], normals[na + 2]);
+                    // vb = new THREE.Vector3(normals[nb], normals[nb + 1], normals[nb + 2]);
+                    vb = new THREE.Vector3().subVectors(edge.cb, edge.ca).normalize();
+                    dot = va.dot(vb);
+                    angle = Math.acos(dot) * THREE.Math.RAD2DEG;
+                    if (angle >= angleThresold) {
+                        sa = edge.sa;
+                        sb = edge.sb;
+                        dVert[sa] = dot;
+                        dVert[sb] = dot;
+                        matches++;
+                    }
+                }
+            }
+
+            // apply curvature
+            for (i = 0; i < curvatures.length; i++) {
+                va = new THREE.Vector3(positions[3 * i], positions[3 * i + 1], positions[3 * i + 2]);
+                sa = va.toArray().toString();
+                curvatures[i] = dVert[sa];
+            }
+
+            var averages = new Array(curvatures.length);
+            var min = 10,
+                max = 0,
+                mid, abs;
+
+            for (i = 0; i < curvatures.length; i += 3) {
+                mid = (curvatures[i] + curvatures[i + 1] + curvatures[i + 2]) / 3;
+                abs = Math.abs(mid);
+                min = Math.min(min, abs);
+                max = Math.max(max, abs);
+                averages[i] = mid;
+                averages[i + 1] = mid;
+                averages[i + 2] = mid;
+            }
+
+            var range = (max - min);
+            for (i = 0; i < averages.length; i++) {
+                mid = averages[i];
+                abs = Math.abs(mid);
+                if (mid < 0) {
+                    averages[i] = (min - abs) / range;
+                } else {
+                    averages[i] = (abs - min) / range;
+                }
+            }
+
+            curvatures = new Float32Array(curvatures); // averages
+            geometry.addAttribute('curvature', new THREE.BufferAttribute(curvatures, 1));
+            console.log('faces', faces.length, 'vertex', geometry.attributes.position.count);
+            console.log('edges', edges.length, 'matches', matches, (matches / edges.length * 100).toFixed(2) + '%', 'angle', angleThresold + '°');
+
+            // faces 13754 vertex 41262
+            // edges 20368 matches 3089 15.17% angle 95° 
+            return geometry;
+        }
+
+        function setEdges1(geometry, minThresholdAngle, maxThresholdAngle) {
+            var min = minThresholdAngle || 265,
+                max = maxThresholdAngle || 275;
+            /*
+            var convexMinDot = Math.cos(THREE.Math.DEG2RAD * (minThresholdAngle || 265));
+            var convexMaxDot = Math.cos(THREE.Math.DEG2RAD * (maxThresholdAngle || 275));
+            var convexMinDotNeg = Math.cos(THREE.Math.DEG2RAD * (minThresholdAngle || 265) - 180);
+            var convexMaxDotNeg = Math.cos(THREE.Math.DEG2RAD * (maxThresholdAngle || 275) - 180);
+            */
+
+            var faces = geometry.faces,
+                vertices = geometry.vertices,
+                face, vert;
+            geometry = new THREE.BufferGeometry().fromGeometry(geometry);
+            var dEdge = {},
+                edge, key, i, ia, ib, ic, va, vb, vc, pa, pb, pc, sa, sb, sc, na, nb, nc, ma, mb,
+                dot, cross, angle;
+            var positions = geometry.attributes.position.array;
+            var normals = geometry.attributes.normal.array;
+
+            function addKey(ia, ib, sa, sb, pa, pb, i) {
+                ma = Math.min(ia, ib); // minimun vertex index
+                mb = Math.max(ia, ib); // maximum vertex index
+                key = ma + '-' + mb;
+                if (dEdge[key] === undefined) {
+                    dEdge[key] = {
+                        sa: sa, // string key vertex a
+                        sb: sb, // string key vertex b
+                        na: pa, // index normal a
+                        fa: i, // index face a
+                        fb: undefined
+                    };
+                } else {
+                    dEdge[key].nb = pa; // index normal b (pa or pb should be indifferently)
+                    dEdge[key].fb = i; // index face b
+                }
+            }
+
+            for (var f = 0; f < faces.length; f++) {
+                face = faces[f];
+                // vertex indices
+                ia = face.a;
+                ib = face.b;
+                ic = face.c;
+                // vertices
+                va = vertices[ia];
+                vb = vertices[ib];
+                vc = vertices[ic];
+                // dVert keys
+                sa = va.toArray().toString();
+                sb = vb.toArray().toString();
+                sc = vc.toArray().toString();
+                i = f * 9; // position face index                
+                pa = i; // position vert a index
+                pb = i + 3; // position vert b index
+                pc = i + 6; // position vert c index
+                // dEdge keys
+                addKey(ia, ib, sa, sb, pa, pb, i); // key edge a-b
+                addKey(ib, ic, sb, sc, pb, pc, i); // key edge b-c
+                addKey(ic, ia, sc, sa, pc, pa, i); // key edge c-a
+            }
+
+            var curvatures = new Array(geometry.attributes.position.count).fill(0.0);
+            curvatures = new Float32Array(curvatures);
+
+            var edges = Object.keys(dEdge);
+            var matches = 0;
+
+            var dVert = {};
+
+            for (key in dEdge) {
+                edge = dEdge[key];
+                if (edge.nb) {
+                    na = edge.na;
+                    nb = edge.nb;
+                    va = new THREE.Vector3(normals[na], normals[na + 1], normals[na + 2]);
+                    vb = new THREE.Vector3(normals[nb], normals[nb + 1], normals[nb + 2]);
+                    dot = va.dot(vb);
+                    angle = Math.acos(dot) * THREE.Math.RAD2DEG;
+                    cross = new THREE.Vector3().crossVectors(va, vb);
+                    if (cross.x < 0 || cross.y < 0 || cross.z < 0) {
+                        angle += 180;
+                    }
+                    if (angle >= min && angle <= max) {
+                        sa = edge.sa;
+                        sb = edge.sb;
+                        dVert[sa] = dot;
+                        dVert[sb] = dot;
+                    }
+                }
+            }
+            // apply curvature
+            for (i = 0; i < curvatures.length; i++) {
+                va = new THREE.Vector3(positions[3 * i], positions[3 * i + 1], positions[3 * i + 2]);
+                sa = va.toArray().toString();
+                curvatures[i] = dVert[sa];
+            }
+            geometry.addAttribute('curvature', new THREE.BufferAttribute(curvatures, 1));
+            console.log('faces', faces.length, 'vertex', geometry.attributes.position.count);
+            console.log('edges', edges.length, 'matches', matches, (matches / edges.length * 100).toFixed(2) + '%');
+
+            // faces 13754 vertex 41262
+            // edges 20368 matches 0 0.00%
+            return geometry;
+        }
+
+        function setEdges2(geometry, thresholdAngle) {
             thresholdAngle = thresholdAngle || 90;
             var thresholdDot = Math.cos(THREE.Math.DEG2RAD * thresholdAngle);
 
             var faces = geometry.faces,
                 face;
             geometry = new THREE.BufferGeometry().fromGeometry(geometry);
-            var edges = {},
+            var dEdge = {},
                 edge, key, ea, eb, i, ia, ib, ic, va, vb, vc, na, nb, nc;
             // var positions = geometry.attributes.position.array;
             var normals = geometry.attributes.normal.array;
@@ -168,8 +357,8 @@
                 ea = Math.min(va, vb);
                 eb = Math.max(va, vb);
                 key = ea + '-' + eb;
-                if (edges[key] === undefined) {
-                    edges[key] = {
+                if (dEdge[key] === undefined) {
+                    dEdge[key] = {
                         a: ia,
                         b: ib,
                         c: ia,
@@ -178,9 +367,9 @@
                         fb: undefined
                     };
                 } else {
-                    edges[key].fb = i;
-                    edges[key].c = ia;
-                    edges[key].d = ib;
+                    dEdge[key].fb = i;
+                    dEdge[key].c = ia;
+                    dEdge[key].d = ib;
                 }
             }
             for (var f = 0; f < faces.length; f++) {
@@ -197,49 +386,23 @@
                 addKey(vc, va, ic, ia, i);
             }
 
-            /*
-            function addKey(a, b, i) {
-                ea = Math.min(a, b);
-                eb = Math.max(a, b);
-                key = ea + '-' + eb;
-                if (edges[key] === undefined) {
-                    edges[key] = {
-                        a: ea,
-                        b: eb,
-                        fa: i,
-                        fb: undefined
-                    };
-                } else {
-                    edges[key].fb = i;
-                    console.log(i);
-                }
-            }
-            for (i = 0; i < positions.length; i += 9) {
-                ia = i;
-                ib = i + 3;
-                ic = i + 6;
-                addKey(ia, ib, i);
-                addKey(ib, ic, i);
-                addKey(ic, ia, i);
-            }
-            */
             var attribute = new Float32Array(geometry.attributes.position.count);
             for (i = 0; i < geometry.attributes.position.count; i++) {
                 attribute[i] = 1.0;
             }
-            var edgeKeys = Object.keys(edges);
-            console.log(edgeKeys.length);
-            var edgeMatches = 0;
+            var edges = Object.keys(dEdge);
+            console.log(edges.length);
+            var matches = 0;
 
             function fillEdge(e) {
                 attribute[e.a / 3] = 0.0;
                 attribute[e.b / 3] = 0.0;
                 attribute[e.c / 3] = 0.0;
                 attribute[e.d / 3] = 0.0;
-                edgeMatches++;
+                matches++;
             }
-            for (key in edges) {
-                edge = edges[key];
+            for (key in dEdge) {
+                edge = dEdge[key];
                 if (edge.fb === undefined) {
                     fillEdge(edge);
                 } else {
@@ -253,15 +416,15 @@
                 }
             }
             geometry.addAttribute('curvature', new THREE.BufferAttribute(attribute, 1));
-            console.log('matches', edgeMatches, (edgeMatches / edgeKeys.length * 100).toFixed(2));
+            console.log('matches', matches, (matches / edges.length * 100).toFixed(2));
             return geometry;
         }
 
-        function setEdges1(geometry, thresholdAngle) {
+        function setEdges3(geometry, thresholdAngle) {
             thresholdAngle = thresholdAngle || 90;
             var thresholdDot = Math.cos(THREE.Math.DEG2RAD * thresholdAngle);
             var edge = [0, 0],
-                edges = {},
+                dEdge = {},
                 edge1, edge2;
             var key, keys = ['a', 'b', 'c'];
             /*
@@ -285,15 +448,15 @@
                     edge[0] = Math.min(edge1, edge2);
                     edge[1] = Math.max(edge1, edge2);
                     key = edge[0] + ',' + edge[1];
-                    if (edges[key] === undefined) {
-                        edges[key] = {
+                    if (dEdge[key] === undefined) {
+                        dEdge[key] = {
                             a: edge[0],
                             b: edge[1],
                             fa: i,
                             fb: undefined
                         };
                     } else {
-                        edges[key].fb = i;
+                        dEdge[key].fb = i;
                     }
                 }
             }
@@ -302,11 +465,11 @@
             for (var i = 0; i < vertices.length * 3; i++) {
                 attribute[i] = 1.0;
             }
-            var edgeKeys = Object.keys(edges);
-            console.log(edgeKeys.length);
-            var edgeMatches = 0;
-            for (key in edges) {
-                var e = edges[key];
+            var edges = Object.keys(dEdge);
+            console.log(edges.length);
+            var matches = 0;
+            for (key in dEdge) {
+                var e = dEdge[key];
                 // an edge is only rendered if the angle (in degrees) between the face normals of the adjoining faces exceeds this value. default = 1 degree.
                 if (e.fb === undefined || faces[e.fa].normal.dot(faces[e.fb].normal) <= thresholdDot) {
                     /*
@@ -321,11 +484,11 @@
                     attribute[e.b * 3] = 0.0;
                     attribute[e.b * 3 + 1] = 0.0;
                     attribute[e.b * 3 + 2] = 0.0;
-                    edgeMatches++;
+                    matches++;
                 }
             }
             console.log(geometry.normals.length);
-            console.log('matches', edgeMatches, (edgeMatches / edgeKeys.length * 100).toFixed(2));
+            console.log('matches', matches, (matches / edges.length * 100).toFixed(2));
             geometry = new THREE.BufferGeometry().fromDirectGeometry(geometry);
             geometry.addAttribute('curvature', new THREE.BufferAttribute(attribute, 1));
             console.log('verts', vertices.length, geometry.attributes.position.count);
@@ -333,16 +496,6 @@
             // this.addAttribute('position', new Float32BufferAttribute(vertices, 3));
             return geometry;
         }
-
-        /*   
-        fn cMAKgetAngleBetweenFaces normal1 normal2 center1 center2 = (
-    	    local faMatrix = translate (matrixFromNormal normal1) center1
-	        local fbCoord = (center2 * (inverse faMatrix)).z
-	        local normAngle = acos(dot (normalize normal1) (normalize normal2))
-	        if fbCoord < 0 do normAngle = 360 - normAngle
-	        normAngle 
-	    )
-        */
 
         function average(dict) {
             var sum = 0;
@@ -378,5 +531,11 @@
     }();
 
     window.Curvature = Curvature;
+
+    var app = angular.module('app');
+
+    app.factory('Curvature', [function () {
+        return Curvature;
+    }]);
 
 }());
