@@ -14,16 +14,16 @@
     var DEBUG = {
         HELPER: false,
         JOINTS: false,
-        MODELS: true,
+        MODELS: false,
         ANGLE: false,
+        NORMAL: false,
     };
 
-    var RAD = Math.PI / 180;
     var SCALE = 0.025;
     var I = 0;
 
     function rad(degree) {
-        return degree * RAD;
+        return degree * THREE.Math.DEG2RAD;
     }
 
     var flipQuaternion = new THREE.Quaternion();
@@ -215,18 +215,16 @@
             item.positionL = new THREE.Vector3();
             item.positionR = joints.left.origin.clone().sub(joints.right.origin.clone().applyQuaternion(item.quaternionR));
             model.geometry.mergeVertices();
-            THREE.GeometryUtils.computeVertexNormals(model.geometry, 20);
+            THREE.GeometryUtils.computeVertexNormals(model.geometry, 40);
             // model.geometry.computeFaceNormals();
             // model.geometry.computeVertexNormals();
             model.geometry.verticesNeedUpdate = true;
             model.geometry.uvsNeedUpdate = true;
             // setEdges
             model.geometry = Curvature.setEdges(model.geometry);
-            /*
             // setGeometry
-            model.geometry = new THREE.BufferGeometry().fromGeometry(model.geometry);
-            Curvature.setGeometry(model.geometry);
-            */
+            // model.geometry = new THREE.BufferGeometry().fromGeometry(model.geometry);
+            // Curvature.setGeometry(model.geometry);
             // model.geometry.mergeVertices();
             // model.geometry.computeFaceNormals();
             // model.geometry.normalsNeedUpdate = true;
@@ -277,6 +275,10 @@
                     joint.add(arrow);
                     */
                 }
+            }
+            if (DEBUG.NORMAL) {
+                var helper = new THREE.VertexNormalsHelper(model, 0.3, 0x00ff00, 1);
+                inner.add(helper);
             }
             inner.position.set(size.x / 2 - dx, 0, 0);
             inner.add(model);
@@ -815,7 +817,7 @@
         }
 
         function setEdges(geometry, angleThresold) {
-            angleThresold = angleThresold || 95;
+            angleThresold = angleThresold || 50;
 
             var faces = geometry.faces,
                 vertices = geometry.vertices,
@@ -826,8 +828,9 @@
                 dot, cross, angle;
             var positions = geometry.attributes.position.array;
             var normals = geometry.attributes.normal.array;
+            var colors = geometry.attributes.color.array;
 
-            function addKey(ia, ib, sa, sb, pa, pb, i, ca) {
+            function addKey(ia, ib, sa, sb, pa, pb, cc) {
                 ma = Math.min(ia, ib); // minimun vertex index
                 mb = Math.max(ia, ib); // maximum vertex index
                 key = ma + '-' + mb;
@@ -836,16 +839,16 @@
                         sa: sa, // string key vertex a
                         sb: sb, // string key vertex b
                         na: pa, // index normal a
-                        ca: ca, // centroid face a
-                        fa: i, // index face a
-                        fb: undefined
+                        ca: cc, // centroid face a
                     };
                 } else {
-                    dEdge[key].nb = pa; // index normal b (pa or pb should be indifferently)
-                    dEdge[key].fb = i; // index face b
-                    dEdge[key].cb = ca; // centroid face b
+                    dEdge[key].nb = pb; // index normal b
+                    dEdge[key].cb = cc; // centroid face b
                 }
             }
+
+            var dVert = {},
+                hVert = {};
 
             for (var f = 0; f < faces.length; f++) {
                 face = faces[f];
@@ -854,91 +857,85 @@
                 ia = face.a;
                 ib = face.b;
                 ic = face.c;
-                // vertices
-                va = vertices[ia];
-                vb = vertices[ib];
-                vc = vertices[ic];
+                // normals
+                na = new THREE.Vector3(normals[9 * f], normals[9 * f + 1], normals[9 * f + 2]);
+                nb = new THREE.Vector3(normals[9 * f + 3], normals[9 * f + 3 + 1], normals[9 * f + 3 + 2]);
+                nc = new THREE.Vector3(normals[9 * f + 6], normals[9 * f + 6 + 1], normals[9 * f + 6 + 2]);
                 // dVert keys
-                sa = va.toArray().toString();
-                sb = vb.toArray().toString();
-                sc = vc.toArray().toString();
-                i = f * 9; // position face index                
-                pa = i; // position vert a index
-                pb = i + 3; // position vert b index
-                pc = i + 6; // position vert c index
+                sa = [positions[9 * f], positions[9 * f + 1], positions[9 * f + 2]].toString();
+                sb = [positions[9 * f + 3], positions[9 * f + 3 + 1], positions[9 * f + 3 + 2]].toString();
+                sc = [positions[9 * f + 6], positions[9 * f + 6 + 1], positions[9 * f + 6 + 2]].toString();
+                //
+                dVert[sa] = hVert[sa] = 0;
+                dVert[sb] = hVert[sb] = 0;
+                dVert[sc] = hVert[sc] = 0;
                 // dEdge keys
-                addKey(ia, ib, sa, sb, pa, pb, i, centroid); // key edge a-b
-                addKey(ib, ic, sb, sc, pb, pc, i, centroid); // key edge b-c
-                addKey(ic, ia, sc, sa, pc, pa, i, centroid); // key edge c-a
+                addKey(ia, ib, sa, sb, na, nb, centroid); // key edge a-b
+                addKey(ib, ic, sb, sc, nb, nc, centroid); // key edge b-c
+                addKey(ic, ia, sc, sa, nc, na, centroid); // key edge c-a
             }
 
-            var curvatures = new Array(geometry.attributes.position.count).fill(0.0);
-
+            var curvatures = new Array(geometry.attributes.position.count).fill(0.01);
+            var hits = new Array(geometry.attributes.position.count).fill(1);
             var edges = Object.keys(dEdge);
             var matches = 0;
 
-            var dVert = {};
-
             for (key in dEdge) {
                 edge = dEdge[key];
+                var ab, ac;
                 if (edge.nb) {
+                    sa = edge.sa;
+                    sb = edge.sb;
                     na = edge.na;
                     nb = edge.nb;
-                    va = new THREE.Vector3(normals[na], normals[na + 1], normals[na + 2]);
-                    // vb = new THREE.Vector3(normals[nb], normals[nb + 1], normals[nb + 2]);
-                    vb = new THREE.Vector3().subVectors(edge.cb, edge.ca).normalize();
-                    dot = va.dot(vb);
-                    angle = Math.acos(dot) * THREE.Math.RAD2DEG;
-                    if (angle >= angleThresold) {
-                        sa = edge.sa;
-                        sb = edge.sb;
-                        dVert[sa] = dot;
-                        dVert[sb] = dot;
+                    nc = new THREE.Vector3().subVectors(edge.cb, edge.ca).normalize();
+                    var ab = Math.acos(THREE.Math.clamp(na.dot(nb), -1, 1));
+                    ab *= THREE.Math.RAD2DEG;
+                    var ac = na.dot(nc);
+                    // console.log(ac);
+                    if (ac <= 0) {
+                        ab += 180;
+                        // ab = (350 - ab);
+                    }
+                    // ab = (ab + 180) % 360;
+                    // console.log(ac);
+                    // console.log('ab', ab);
+                    // console.log('ac', ac);
+                    /*
+                    if (ab < 180) {
+                        ab = 0;
+                    }
+                    */
+                    // ab -= 180;
+                    if (ab > 0) {
                         matches++;
                     }
+                    // console.log(ab);
+                    ab /= 180;
+                    dVert[sa] += ab;
+                    dVert[sb] += ab;
+                    hVert[sa]++;
+                    hVert[sb]++;
                 }
             }
-
-            // apply curvature
+            for (var p in dVert) {
+                var hits = hVert[p];
+                if (hits > 0) {
+                    dVert[p] /= hVert[p];
+                }
+            }
             for (i = 0; i < curvatures.length; i++) {
                 va = new THREE.Vector3(positions[3 * i], positions[3 * i + 1], positions[3 * i + 2]);
                 sa = va.toArray().toString();
                 curvatures[i] = dVert[sa];
+                colors[3 * i] = curvatures[i];
+                colors[3 * i + 1] = 0.3;
+                colors[3 * i + 2] = 0.2;
             }
-
-            var averages = new Array(curvatures.length);
-            var min = 10,
-                max = 0,
-                mid, abs;
-
-            for (i = 0; i < curvatures.length; i += 3) {
-                mid = (curvatures[i] + curvatures[i + 1] + curvatures[i + 2]) / 3;
-                abs = Math.abs(mid);
-                min = Math.min(min, abs);
-                max = Math.max(max, abs);
-                averages[i] = mid;
-                averages[i + 1] = mid;
-                averages[i + 2] = mid;
-            }
-
-            var range = (max - min);
-            for (i = 0; i < averages.length; i++) {
-                mid = averages[i];
-                abs = Math.abs(mid);
-                if (mid < 0) {
-                    averages[i] = (min - abs) / range;
-                } else {
-                    averages[i] = (abs - min) / range;
-                }
-            }
-
-            curvatures = new Float32Array(curvatures); // averages
+            curvatures = new Float32Array(curvatures);
             geometry.addAttribute('curvature', new THREE.BufferAttribute(curvatures, 1));
             console.log('faces', faces.length, 'vertex', geometry.attributes.position.count);
             console.log('edges', edges.length, 'matches', matches, (matches / edges.length * 100).toFixed(2) + '%', 'angle', angleThresold + '°');
-
-            // faces 13754 vertex 41262
-            // edges 20368 matches 3089 15.17% angle 95° 
             return geometry;
         }
 
@@ -2162,6 +2159,19 @@
             });
         }
 
+        function colorTween(from, hex) {
+            var fromColor = new THREE.Color(from.color.getHex());
+            var color = new THREE.Color(hex);
+            TweenLite.to(fromColor, 0.4, {
+                r: color.r,
+                g: color.g,
+                b: color.b,
+                onUpdate: function () {
+                    from.color = fromColor;
+                }
+            });
+        }
+
         function materialTween(from, to, callback) {
             var options = {
                 onComplete: function () {
@@ -2172,12 +2182,7 @@
             };
             for (var p in to) {
                 if (p === 'color') {
-                    var color = new THREE.Color(to.color);
-                    options[p] = {
-                        r: color.r,
-                        g: color.g,
-                        b: color.b
-                    };
+                    colorTween(from, to[p]);
                 } else {
                     options[p] = to[p];
                 }
@@ -2351,25 +2356,25 @@
             // material.environment = // reflection/refraction (vec3)
             // material.transform = // vertex transformation (vec3)
             var curvature = new THREE.AttributeNode('curvature', 'float');
-            /*
-            var hard = new THREE.FloatNode(20.0);
-            var curvature = new THREE.OperatorNode(
-                _curvature,
-                hard,
-                THREE.OperatorNode.ADD
+            var brushed = new THREE.TextureNode(textures.brushed);
+            var brushedInvert = new THREE.Math1Node(brushed, THREE.Math1Node.INVERT);
+            var brushedInvertDark = new THREE.Math3Node(
+                brushedInvert,
+                new THREE.ColorNode(0x111111),
+                new THREE.FloatNode(0.8),
+                THREE.Math3Node.MUL
             );
-            */
-            var colorA = new THREE.ColorNode(0x040404);
-            var colorB = new THREE.TextureNode(textures.brushed);
+            var colorA = new THREE.ColorNode(0x111111);
+            var colorB = new THREE.ColorNode(0x666666); // new THREE.TextureNode(textures.brushed);
             // var colorB = new THREE.ColorNode(0xffffff);
             var color = new THREE.Math3Node(
-                colorA,
-                colorB,
+                brushed,
+                brushedInvertDark,
                 curvature,
                 THREE.Math3Node.MIX
             );
             material.color = color;
-            // material.roughness = new THREE.FloatNode(0.5);
+            //
             var roughnessA = new THREE.FloatNode(0.6);
             var roughnessB = new THREE.FloatNode(0.5);
             var roughness = new THREE.Math3Node(
@@ -2379,11 +2384,15 @@
                 THREE.Math3Node.MIX
             );
             material.roughness = roughness;
-            material.metalness = new THREE.FloatNode(0.7);
+            material.metalness = new THREE.FloatNode(0.8);
             /*
+            material.normal = new THREE.TextureNode(textures.brushed);
+            material.normalScale = normalMask;
+            */
             // var roughnessA = new THREE.TextureNode(textures.weatheredInverted);
-            var metalnessA = new THREE.FloatNode(0.7);
-            var metalnessB = new THREE.FloatNode(0.7);
+            /*
+            var metalnessA = new THREE.FloatNode(0.3);
+            var metalnessB = new THREE.FloatNode(0.5);
             var metalness = new THREE.Math3Node(
                 metalnessA,
                 metalnessB,
@@ -2393,6 +2402,7 @@
             material.metalness = metalness;
             */
             // var environment = new THREE.CubeTextureNode(textures.env);
+            /*
             var environment = new THREE.Math3Node(
                 new THREE.ColorNode(0x040404),
                 new THREE.CubeTextureNode(textures.env),
@@ -2400,6 +2410,7 @@
                 THREE.Math3Node.MIX
             );
             material.environment = environment;
+            */
             /*
             var environmentAlpha = new THREE.OperatorNode(
                 curvature,
@@ -2802,7 +2813,7 @@
 
     function calcNormal(normals, normal, angle) {
         var allowed = normals.filter(function (n) {
-            return n.angleTo(normal) < angle * Math.PI / 180;
+            return n.angleTo(normal) < angle * THREE.Math.DEG2RAD;
         });
         return allowed.reduce(function (a, b) {
             return a.clone().add(b);

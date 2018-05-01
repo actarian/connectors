@@ -6,16 +6,16 @@
     var DEBUG = {
         HELPER: false,
         JOINTS: false,
-        MODELS: true,
+        MODELS: false,
         ANGLE: false,
+        NORMAL: false,
     };
 
-    var RAD = Math.PI / 180;
     var SCALE = 0.025;
     var I = 0;
 
     function rad(degree) {
-        return degree * RAD;
+        return degree * THREE.Math.DEG2RAD;
     }
 
     var flipQuaternion = new THREE.Quaternion();
@@ -207,18 +207,16 @@
             item.positionL = new THREE.Vector3();
             item.positionR = joints.left.origin.clone().sub(joints.right.origin.clone().applyQuaternion(item.quaternionR));
             model.geometry.mergeVertices();
-            THREE.GeometryUtils.computeVertexNormals(model.geometry, 20);
+            THREE.GeometryUtils.computeVertexNormals(model.geometry, 40);
             // model.geometry.computeFaceNormals();
             // model.geometry.computeVertexNormals();
             model.geometry.verticesNeedUpdate = true;
             model.geometry.uvsNeedUpdate = true;
             // setEdges
             model.geometry = Curvature.setEdges(model.geometry);
-            /*
             // setGeometry
-            model.geometry = new THREE.BufferGeometry().fromGeometry(model.geometry);
-            Curvature.setGeometry(model.geometry);
-            */
+            // model.geometry = new THREE.BufferGeometry().fromGeometry(model.geometry);
+            // Curvature.setGeometry(model.geometry);
             // model.geometry.mergeVertices();
             // model.geometry.computeFaceNormals();
             // model.geometry.normalsNeedUpdate = true;
@@ -269,6 +267,10 @@
                     joint.add(arrow);
                     */
                 }
+            }
+            if (DEBUG.NORMAL) {
+                var helper = new THREE.VertexNormalsHelper(model, 0.3, 0x00ff00, 1);
+                inner.add(helper);
             }
             inner.position.set(size.x / 2 - dx, 0, 0);
             inner.add(model);

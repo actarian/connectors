@@ -564,6 +564,19 @@
             });
         }
 
+        function colorTween(from, hex) {
+            var fromColor = new THREE.Color(from.color.getHex());
+            var color = new THREE.Color(hex);
+            TweenLite.to(fromColor, 0.4, {
+                r: color.r,
+                g: color.g,
+                b: color.b,
+                onUpdate: function () {
+                    from.color = fromColor;
+                }
+            });
+        }
+
         function materialTween(from, to, callback) {
             var options = {
                 onComplete: function () {
@@ -574,12 +587,7 @@
             };
             for (var p in to) {
                 if (p === 'color') {
-                    var color = new THREE.Color(to.color);
-                    options[p] = {
-                        r: color.r,
-                        g: color.g,
-                        b: color.b
-                    };
+                    colorTween(from, to[p]);
                 } else {
                     options[p] = to[p];
                 }
@@ -753,25 +761,25 @@
             // material.environment = // reflection/refraction (vec3)
             // material.transform = // vertex transformation (vec3)
             var curvature = new THREE.AttributeNode('curvature', 'float');
-            /*
-            var hard = new THREE.FloatNode(20.0);
-            var curvature = new THREE.OperatorNode(
-                _curvature,
-                hard,
-                THREE.OperatorNode.ADD
+            var brushed = new THREE.TextureNode(textures.brushed);
+            var brushedInvert = new THREE.Math1Node(brushed, THREE.Math1Node.INVERT);
+            var brushedInvertDark = new THREE.Math3Node(
+                brushedInvert,
+                new THREE.ColorNode(0x111111),
+                new THREE.FloatNode(0.8),
+                THREE.Math3Node.MUL
             );
-            */
-            var colorA = new THREE.ColorNode(0x040404);
-            var colorB = new THREE.TextureNode(textures.brushed);
+            var colorA = new THREE.ColorNode(0x111111);
+            var colorB = new THREE.ColorNode(0x666666); // new THREE.TextureNode(textures.brushed);
             // var colorB = new THREE.ColorNode(0xffffff);
             var color = new THREE.Math3Node(
-                colorA,
-                colorB,
+                brushed,
+                brushedInvertDark,
                 curvature,
                 THREE.Math3Node.MIX
             );
             material.color = color;
-            // material.roughness = new THREE.FloatNode(0.5);
+            //
             var roughnessA = new THREE.FloatNode(0.6);
             var roughnessB = new THREE.FloatNode(0.5);
             var roughness = new THREE.Math3Node(
@@ -781,11 +789,15 @@
                 THREE.Math3Node.MIX
             );
             material.roughness = roughness;
-            material.metalness = new THREE.FloatNode(0.7);
+            material.metalness = new THREE.FloatNode(0.8);
             /*
+            material.normal = new THREE.TextureNode(textures.brushed);
+            material.normalScale = normalMask;
+            */
             // var roughnessA = new THREE.TextureNode(textures.weatheredInverted);
-            var metalnessA = new THREE.FloatNode(0.7);
-            var metalnessB = new THREE.FloatNode(0.7);
+            /*
+            var metalnessA = new THREE.FloatNode(0.3);
+            var metalnessB = new THREE.FloatNode(0.5);
             var metalness = new THREE.Math3Node(
                 metalnessA,
                 metalnessB,
@@ -795,6 +807,7 @@
             material.metalness = metalness;
             */
             // var environment = new THREE.CubeTextureNode(textures.env);
+            /*
             var environment = new THREE.Math3Node(
                 new THREE.ColorNode(0x040404),
                 new THREE.CubeTextureNode(textures.env),
@@ -802,6 +815,7 @@
                 THREE.Math3Node.MIX
             );
             material.environment = environment;
+            */
             /*
             var environmentAlpha = new THREE.OperatorNode(
                 curvature,

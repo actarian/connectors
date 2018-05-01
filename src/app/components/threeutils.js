@@ -5,7 +5,7 @@
 
     function calcNormal(normals, normal, angle) {
         var allowed = normals.filter(function (n) {
-            return n.angleTo(normal) < angle * Math.PI / 180;
+            return n.angleTo(normal) < angle * THREE.Math.DEG2RAD;
         });
         return allowed.reduce(function (a, b) {
             return a.clone().add(b);
