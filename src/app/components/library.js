@@ -765,23 +765,23 @@
             var brushedInvert = new THREE.Math1Node(brushed, THREE.Math1Node.INVERT);
             var brushedInvertDark = new THREE.Math3Node(
                 brushedInvert,
-                new THREE.ColorNode(0x111111),
+                new THREE.ColorNode(0x000000),
                 new THREE.FloatNode(0.8),
-                THREE.Math3Node.MUL
+                THREE.Math3Node.MIX
             );
-            var colorA = new THREE.ColorNode(0x111111);
-            var colorB = new THREE.ColorNode(0x666666); // new THREE.TextureNode(textures.brushed);
+            var colorA = new THREE.ColorNode(0x444444);
+            var colorB = new THREE.ColorNode(0x000000); // new THREE.TextureNode(textures.brushed);
             // var colorB = new THREE.ColorNode(0xffffff);
             var color = new THREE.Math3Node(
-                brushed,
                 brushedInvertDark,
+                brushed,
                 curvature,
                 THREE.Math3Node.MIX
             );
             material.color = color;
             //
-            var roughnessA = new THREE.FloatNode(0.6);
-            var roughnessB = new THREE.FloatNode(0.5);
+            var roughnessA = new THREE.FloatNode(0.8);
+            var roughnessB = new THREE.FloatNode(0.4);
             var roughness = new THREE.Math3Node(
                 roughnessA,
                 roughnessB,
@@ -789,9 +789,9 @@
                 THREE.Math3Node.MIX
             );
             material.roughness = roughness;
-            material.metalness = new THREE.FloatNode(0.8);
+            material.metalness = new THREE.FloatNode(0.99);
             /*
-            material.normal = new THREE.TextureNode(textures.brushed);
+            material.normal = new THREE.TextureNode(textures.sand);
             material.normalScale = normalMask;
             */
             // var roughnessA = new THREE.TextureNode(textures.weatheredInverted);
