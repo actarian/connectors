@@ -7,7 +7,7 @@
   "license": "UNLICENSED",
   "homepage": "https://github.com/actarian/connectors/blob/master/README.md",
   "devDependencies": {
-    "gulp": "^3.9.1",
+    "gulp": "^4.0.2",
     "gulp-autoprefixer": "^4.1.0",
     "gulp-coffee": "^3.0.2",
     "gulp-concat": "^2.6.1",
